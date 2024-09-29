@@ -1,0 +1,59 @@
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum BinReaderError {
+    #[error("{0} data requested, not enough data in buffer")]
+    TooMuchDataRequested(usize)
+}
+
+pub type BinReaderResult<T> = Result<T, BinReaderError>;
+
+pub struct BinReader<'a> {
+    bin_data: &'a[u8],
+    cursor: usize
+}
+
+impl<'a> BinReader<'a> {
+    pub fn new(bin_data: &'a [u8]) -> BinReader<'a> {
+        BinReader {
+            bin_data,
+            cursor: 0
+        }
+    }
+
+    fn buf_len(&self) -> usize {
+        self.bin_data.len()
+    }
+
+    fn read_n_bytes(&mut self, n: usize) -> BinReaderResult<&[u8]>
+    {
+        let buf_len = self.buf_len();
+
+        if self.cursor >= buf_len || self.cursor + n > buf_len {
+            return Err(BinReaderError::TooMuchDataRequested(n));
+        }
+
+        let data = &self.bin_data[self.cursor .. self.cursor + n];
+        self.cursor += n;
+
+        Ok(data)
+    }
+
+    pub fn read_u8(&mut self) -> BinReaderResult<u8> {
+        let bytes = self.read_n_bytes(1)?;
+
+        Ok(bytes[0])
+    }
+
+    pub fn read_u16(&mut self) -> BinReaderResult<u16> {
+        let bytes = self.read_n_bytes(2)?;
+
+        Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
+    }
+
+    pub fn read_u32(&mut self) -> BinReaderResult<u32> {
+        let bytes = self.read_n_bytes(4)?;
+
+        Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+}
