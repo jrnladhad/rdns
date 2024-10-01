@@ -1,5 +1,6 @@
 pub mod message;
 
-// mod header;
 mod bin_reader;
 mod header;
+mod header_flags;
+mod fqdn;

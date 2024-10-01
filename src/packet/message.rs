@@ -1,4 +1,5 @@
 use super::header::Header;
+use super::fqdn::FQDN;
 
 struct Message
 {

@@ -25,7 +25,7 @@ impl<'a> BinReader<'a> {
         self.bin_data.len()
     }
 
-    fn read_n_bytes(&mut self, n: usize) -> BinReaderResult<&[u8]>
+    pub fn read_n_bytes(&mut self, n: usize) -> BinReaderResult<&[u8]>
     {
         let buf_len = self.buf_len();
 
@@ -55,5 +55,9 @@ impl<'a> BinReader<'a> {
         let bytes = self.read_n_bytes(4)?;
 
         Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
+
+    pub fn peek(&self) -> BinReaderResult<u8> {
+        Ok(self.bin_data[self.cursor])
     }
 }
