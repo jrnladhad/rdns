@@ -9,13 +9,13 @@ pub enum HeaderFlagError {
     #[error("Zero flag has data other than 0")]
     ZeroFlagUnset,
     #[error("A query cannot have RA bit set")]
-    QueryWithRABitSet
+    QueryWithRABitSet,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum QR {
     Query,
-    Response
+    Response,
 }
 
 impl Default for QR {
@@ -29,7 +29,7 @@ impl From<u16> for QR {
         match value {
             0 => QR::Query,
             1 => QR::Response,
-            _ => QR::Query
+            _ => QR::Query,
         }
     }
 }
@@ -38,7 +38,7 @@ impl From<u16> for QR {
 pub enum Opcode {
     Query,
     Iquery,
-    Status
+    Status,
 }
 
 impl Default for Opcode {
@@ -54,7 +54,7 @@ impl TryFrom<u16> for Opcode {
             0 => Ok(Opcode::Query),
             1 => Ok(Opcode::Iquery),
             2 => Ok(Opcode::Status),
-            _ => Err(HeaderFlagError::MalformedOpcode)
+            _ => Err(HeaderFlagError::MalformedOpcode),
         }
     }
 }
@@ -66,7 +66,7 @@ pub enum Rcode {
     ServerFailure,
     NameError,
     NotImplemented,
-    Refused
+    Refused,
 }
 
 impl Default for Rcode {
@@ -85,7 +85,7 @@ impl TryFrom<u16> for Rcode {
             3 => Ok(Rcode::NameError),
             4 => Ok(Rcode::NotImplemented),
             5 => Ok(Rcode::Refused),
-            _ => Err(HeaderFlagError::MalformedRcode)
+            _ => Err(HeaderFlagError::MalformedRcode),
         }
     }
 }
@@ -99,7 +99,7 @@ pub struct HeaderFlags {
     recursion_desired: bool,
     recursion_available: bool,
     zero: u8,
-    response_code: Rcode
+    response_code: Rcode,
 }
 
 pub struct HeaderFlagsBuilder {
@@ -110,7 +110,7 @@ pub struct HeaderFlagsBuilder {
     recursion_desired: bool,
     recursion_available: bool,
     zero: u8,
-    response_code: Rcode
+    response_code: Rcode,
 }
 
 impl HeaderFlagsBuilder {
@@ -123,26 +123,26 @@ impl HeaderFlagsBuilder {
             recursion_desired: bool::default(),
             recursion_available: bool::default(),
             zero: u8::default(),
-            response_code: Rcode::default()
+            response_code: Rcode::default(),
         }
     }
 
-    pub fn query_or_response(&mut self, qr: QR) -> &mut Self{
+    pub fn query_or_response(&mut self, qr: QR) -> &mut Self {
         self.query_or_response = qr;
         self
     }
 
-    pub fn opcode(&mut self, opcode: Opcode) -> &mut Self{
-        self.opcode= opcode;
+    pub fn opcode(&mut self, opcode: Opcode) -> &mut Self {
+        self.opcode = opcode;
         self
     }
 
-    pub fn authoritative_answer(&mut self, authoritative_answer: bool) -> &mut Self{
+    pub fn authoritative_answer(&mut self, authoritative_answer: bool) -> &mut Self {
         self.authoritative_answer = authoritative_answer;
         self
     }
 
-    pub fn truncation(&mut self, truncation: bool) -> &mut Self{
+    pub fn truncation(&mut self, truncation: bool) -> &mut Self {
         self.truncation = truncation;
         self
     }
@@ -152,12 +152,12 @@ impl HeaderFlagsBuilder {
         self
     }
 
-    pub fn recursion_available(&mut self, recursion_available: bool) -> &mut Self{
+    pub fn recursion_available(&mut self, recursion_available: bool) -> &mut Self {
         self.recursion_available = recursion_available;
         self
     }
 
-    pub fn response_code(&mut self, response_code: Rcode) -> &mut Self{
+    pub fn response_code(&mut self, response_code: Rcode) -> &mut Self {
         self.response_code = response_code;
         self
     }
@@ -171,7 +171,7 @@ impl HeaderFlagsBuilder {
             recursion_desired: self.recursion_desired,
             recursion_available: self.recursion_available,
             zero: self.zero,
-            response_code: self.response_code
+            response_code: self.response_code,
         }
     }
 }
@@ -202,11 +202,11 @@ impl TryFrom<u16> for HeaderFlags {
         let response_code = Rcode::try_from(value & RC_MASK)?;
 
         if zero != 0 {
-            return Err(HeaderFlagError::ZeroFlagUnset)
+            return Err(HeaderFlagError::ZeroFlagUnset);
         }
 
         if query_or_response == QR::Query && recursion_available {
-            return Err(HeaderFlagError::QueryWithRABitSet)
+            return Err(HeaderFlagError::QueryWithRABitSet);
         }
 
         Ok(HeaderFlags {
@@ -217,7 +217,7 @@ impl TryFrom<u16> for HeaderFlags {
             recursion_desired,
             recursion_available,
             zero,
-            response_code
+            response_code,
         })
     }
 }

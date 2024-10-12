@@ -25,7 +25,7 @@ pub struct Header {
     question_count: u16,
     answer_count: u16,
     authoritative_count: u16,
-    additional_count: u16
+    additional_count: u16,
 }
 
 impl Header {
@@ -38,8 +38,7 @@ impl Header {
             .read_u16()
             .map_err(|_| HeaderError::InsufficientData(2))?;
 
-        let flags = HeaderFlags::try_from(flags)
-            .map_err(|_| { HeaderError::FlagError})?;
+        let flags = HeaderFlags::try_from(flags).map_err(|_| HeaderError::FlagError)?;
 
         let question_count = decoder
             .read_u16()
@@ -57,13 +56,13 @@ impl Header {
             .read_u16()
             .map_err(|_| HeaderError::InsufficientData(2))?;
 
-        Ok(Header{
+        Ok(Header {
             id,
             flags,
             question_count,
             answer_count,
             authoritative_count,
-            additional_count
+            additional_count,
         })
     }
 
@@ -102,7 +101,7 @@ pub struct HeaderBuilder {
     question_count: u16,
     answer_count: u16,
     authoritative_count: u16,
-    additional_count: u16
+    additional_count: u16,
 }
 
 impl HeaderBuilder {
@@ -113,7 +112,7 @@ impl HeaderBuilder {
             question_count: 0,
             answer_count: 0,
             additional_count: 0,
-            authoritative_count: 0
+            authoritative_count: 0,
         }
     }
 
@@ -149,25 +148,21 @@ impl HeaderBuilder {
             question_count: self.question_count,
             answer_count: self.answer_count,
             authoritative_count: self.authoritative_count,
-            additional_count: self.additional_count
+            additional_count: self.additional_count,
         }
     }
 }
 
 #[cfg(test)]
-mod test
-{
+mod test {
     use crate::packet::bin_reader::BinReader;
-    use crate::packet::header_flags::{HeaderFlags, Opcode, Rcode, QR};
     use crate::packet::header::{Header, HeaderError};
+    use crate::packet::header_flags::{HeaderFlags, Opcode, Rcode, QR};
 
     #[test]
-    fn read_query_header_success()
-    {
+    fn read_query_header_success() {
         let packet_bytes: [u8; 12] = [
-            0xf2, 0xe8, 0x01, 0x00,
-            0x00, 0x01, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00
+            0xf2, 0xe8, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
         let expected_header_flags = HeaderFlags::builder()
@@ -195,12 +190,9 @@ mod test
     }
 
     #[test]
-    fn read_response_header_success()
-    {
+    fn read_response_header_success() {
         let packet_bytes: [u8; 12] = [
-            0xf2, 0xe8, 0x81, 0x80,
-            0x00, 0x01, 0x00, 0x01,
-            0x00, 0x00, 0x00, 0x00,
+            0xf2, 0xe8, 0x81, 0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
         ];
 
         let expected_header_flags = HeaderFlags::builder()
@@ -228,18 +220,15 @@ mod test
     }
 
     #[test]
-    fn read_header_insufficient_data()
-    {
-        let packet_bytes: [u8; 2] = [
-            0xf2, 0xe8,
-        ];
+    fn read_header_insufficient_data() {
+        let packet_bytes: [u8; 2] = [0xf2, 0xe8];
 
         let mut decoder = BinReader::new(&packet_bytes);
 
         assert!(Header::from_bytes(&mut decoder).is_err_and(|e| {
             match e {
                 HeaderError::InsufficientData(_) => true,
-                _ => false
+                _ => false,
             }
         }));
     }

@@ -67,13 +67,9 @@ impl<'a> BinReader<'a> {
         Ok(self.bin_data[self.cursor as usize])
     }
 
-    pub fn curr_pos(&self) -> u16 {
-        self.cursor
-    }
-
     pub fn cheap_clone(&self, cursor: u16) -> Self {
         BinReader {
-            bin_data: &self.bin_data,
+            bin_data: self.bin_data,
             cursor
         }
     }
