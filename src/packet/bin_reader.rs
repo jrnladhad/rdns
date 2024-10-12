@@ -3,14 +3,16 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum BinReaderError {
     #[error("{0} data requested, not enough data in buffer")]
-    TooMuchDataRequested(usize)
+    TooMuchDataRequested(u16),
+    #[error("Cursor is past the buffer size and no data can be read")]
+    ReaderIsPastTheDataBuffer,
 }
 
 pub type BinReaderResult<T> = Result<T, BinReaderError>;
 
 pub struct BinReader<'a> {
     bin_data: &'a[u8],
-    cursor: usize
+    cursor: u16
 }
 
 impl<'a> BinReader<'a> {
@@ -25,15 +27,15 @@ impl<'a> BinReader<'a> {
         self.bin_data.len()
     }
 
-    pub fn read_n_bytes(&mut self, n: usize) -> BinReaderResult<&[u8]>
+    pub fn read_n_bytes(&mut self, n: u16) -> BinReaderResult<&[u8]>
     {
-        let buf_len = self.buf_len();
+        let buf_len = self.buf_len() as u16;
 
         if self.cursor >= buf_len || self.cursor + n > buf_len {
             return Err(BinReaderError::TooMuchDataRequested(n));
         }
 
-        let data = &self.bin_data[self.cursor .. self.cursor + n];
+        let data = &self.bin_data[(self.cursor as usize).. (self.cursor + n) as usize];
         self.cursor += n;
 
         Ok(data)
@@ -58,6 +60,21 @@ impl<'a> BinReader<'a> {
     }
 
     pub fn peek(&self) -> BinReaderResult<u8> {
-        Ok(self.bin_data[self.cursor])
+        if self.cursor as usize >= self.bin_data.len() {
+            return Err(BinReaderError::ReaderIsPastTheDataBuffer)
+        }
+
+        Ok(self.bin_data[self.cursor as usize])
+    }
+
+    pub fn curr_pos(&self) -> u16 {
+        self.cursor
+    }
+
+    pub fn cheap_clone(&self, cursor: u16) -> Self {
+        BinReader {
+            bin_data: &self.bin_data,
+            cursor
+        }
     }
 }
