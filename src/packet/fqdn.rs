@@ -3,7 +3,7 @@ use thiserror::Error;
 
 const PTR_MASK: u8 = 11 << 6;
 const OFFSET_MASK: u16 = 0x3FFF;
-const MAX_JUMP_REDIRECTION: u16 = 2;
+const MAX_JUMP_REDIRECTION: u16 = 3;
 
 #[derive(Error, Debug)]
 pub enum FqdnError {
@@ -180,13 +180,32 @@ mod test {
     fn read_ptr_from_between() {
         let packet_bytes: [u8; 24] = [
             0x01, 0x61, 0x0c, 0x72, 0x6F, 0x6F, 0x74, 0x2d, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-            0x73, 0x03, 0x6e, 0x65, 0x74, 0x00, 0x01, 0x62, 0xc0, 0x02,
+            0x73, 0x03, 0x6e, 0x65, 0x74, 0x00, // a.root-servers.net
+            0x01, 0x62, 0xc0, 0x02, // b.root-servers.net
         ];
 
         let expected = String::from("b.root-servers.net");
 
         let decoder = BinReader::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(20);
+
+        let fqdn = FQDN::from_bytes(&mut decoder).unwrap();
+
+        assert_eq!(fqdn.to_str(), expected);
+    }
+
+    #[test]
+    fn read_ptr_multi_jump() {
+        let packet_bytes: [u8; 19] = [
+            0x01, 0x61, 0x03, 0x66, 0x6F, 0x6F, 0x03, 0x63, 0x6F, 0x6D, 0x00, // a.foo.com.
+            0x01, 0x62, 0xc0, 0x02, // b.foo.com
+            0x01, 0x64, 0xc0, 0x0b, // d.b.foo.com
+        ];
+
+        let expected = String::from("d.b.foo.com");
+
+        let decoder = BinReader::new(&packet_bytes);
+        let mut decoder = decoder.cheap_clone(15);
 
         let fqdn = FQDN::from_bytes(&mut decoder).unwrap();
 
