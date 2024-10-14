@@ -16,7 +16,7 @@ pub enum HeaderError {
     FlagError,
 }
 
-pub(crate) type HeaderResult<T> = Result<T, HeaderError>;
+type HeaderResult<T> = Result<T, HeaderError>;
 
 #[derive(Debug, PartialEq)]
 pub struct Header {

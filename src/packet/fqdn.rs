@@ -25,6 +25,8 @@ pub enum FqdnError {
     IncorrectPointerOffset,
     #[error("Too many redirections while reading name")]
     TooManyRedirections,
+    #[error("Unable to read data from the buffer")]
+    InsufficientData
 }
 
 pub type FqdnResult<T> = Result<T, FqdnError>;
@@ -113,7 +115,10 @@ impl FQDN {
                     FqdnParsingFSM::End
                 }
 
-                FqdnParsingFSM::End => break,
+                FqdnParsingFSM::End => {
+                    let _ = decoder.read_u8().map_err(|_| FqdnError::InsufficientData);
+                    break
+                },
             }
         }
 
@@ -180,8 +185,8 @@ mod test {
     fn read_ptr_from_between() {
         let packet_bytes: [u8; 24] = [
             0x01, 0x61, 0x0c, 0x72, 0x6F, 0x6F, 0x74, 0x2d, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72,
-            0x73, 0x03, 0x6e, 0x65, 0x74, 0x00, // a.root-servers.net
-            0x01, 0x62, 0xc0, 0x02, // b.root-servers.net
+            0x73, 0x03, 0x6e, 0x65, 0x74, 0x00, // a.root-servers.net.
+            0x01, 0x62, 0xc0, 0x02, // b.root-servers.net.
         ];
 
         let expected = String::from("b.root-servers.net");
@@ -198,8 +203,8 @@ mod test {
     fn read_ptr_multi_jump() {
         let packet_bytes: [u8; 19] = [
             0x01, 0x61, 0x03, 0x66, 0x6F, 0x6F, 0x03, 0x63, 0x6F, 0x6D, 0x00, // a.foo.com.
-            0x01, 0x62, 0xc0, 0x02, // b.foo.com
-            0x01, 0x64, 0xc0, 0x0b, // d.b.foo.com
+            0x01, 0x62, 0xc0, 0x02, // b.foo.com.
+            0x01, 0x64, 0xc0, 0x0b, // d.b.foo.com.
         ];
 
         let expected = String::from("d.b.foo.com");
