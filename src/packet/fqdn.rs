@@ -5,6 +5,7 @@ use thiserror::Error;
 const PTR_MASK: u8 = 11 << 6;
 const OFFSET_MASK: u16 = 0x3FFF;
 const MAX_REDIRECTIONS: u16 = 3;
+const MAX_FQDN_LENGTH: usize = 255;
 
 #[derive(Error, Debug)]
 pub enum FqdnError {
@@ -86,7 +87,7 @@ impl Fqdn {
 impl FqdnBuilder<FqdnUnset> {
     pub fn new() -> Self {
         FqdnBuilder {
-            labels: Vec::with_capacity(64),
+            labels: Vec::with_capacity(MAX_FQDN_LENGTH),
             state: PhantomData,
         }
     }
@@ -133,7 +134,7 @@ impl FqdnBuilder<FqdnUnset> {
                 FqdnParsingFSM::Start => Self::get_parsing_state(decoder)?,
 
                 FqdnParsingFSM::Length => {
-                    if self.labels.len() >= 255 {
+                    if self.labels.len() >= MAX_FQDN_LENGTH {
                         return Err(FqdnError::FqdnTooLong);
                     }
 

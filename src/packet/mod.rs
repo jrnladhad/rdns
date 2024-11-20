@@ -5,3 +5,5 @@ mod header;
 mod header_flags;
 mod question;
 mod record;
+mod record_type;
+mod record_class;

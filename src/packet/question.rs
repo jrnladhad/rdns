@@ -1,5 +1,7 @@
 use crate::packet::bin_reader::BinReader;
 use crate::packet::fqdn::Fqdn;
+use crate::packet::record_type::RecordType;
+use crate::packet::record_class::RecordClass;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -14,57 +16,6 @@ pub enum QuestionError {
 
 type QuestionResult<T> = Result<T, QuestionError>;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-enum QuestionType {
-    A,
-    NS,
-    CNAME,
-    SOA,
-    WKS,
-    PTR,
-    INFO,
-    MINFO,
-    MX,
-    TXT,
-    AXFR,
-    ALL,
-    UNKNOWN,
-}
-
-impl From<u16> for QuestionType {
-    fn from(value: u16) -> Self {
-        match value {
-            1 => QuestionType::A,
-            2 => QuestionType::NS,
-            5 => QuestionType::CNAME,
-            6 => QuestionType::SOA,
-            255 => QuestionType::ALL,
-            _ => QuestionType::UNKNOWN,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-enum QuestionClass {
-    IN,
-    CH,
-    HS,
-    ANY,
-    UNKNOWN,
-}
-
-impl From<u16> for QuestionClass {
-    fn from(value: u16) -> Self {
-        match value {
-            1 => QuestionClass::IN,
-            3 => QuestionClass::CH,
-            4 => QuestionClass::HS,
-            255 => QuestionClass::ANY,
-            _ => QuestionClass::UNKNOWN,
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 struct FqdnUnset;
 #[derive(Debug, Clone)]
@@ -77,7 +28,7 @@ impl FqdnState for FqdnSet {}
 #[derive(Debug, Clone)]
 struct QuestionTypeUnset;
 #[derive(Debug, Clone)]
-struct QuestionTypeSet(QuestionType);
+struct QuestionTypeSet(RecordType);
 
 trait QuestionTypeState {}
 impl QuestionTypeState for QuestionTypeUnset {}
@@ -86,8 +37,8 @@ impl QuestionTypeState for QuestionTypeSet {}
 #[derive(Debug, PartialEq)]
 pub struct Question {
     qname: Fqdn,
-    qtype: QuestionType,
-    qclass: QuestionClass,
+    qtype: RecordType,
+    qclass: RecordClass,
 }
 
 pub struct QuestionBuilder<QN, QT>
@@ -97,7 +48,7 @@ where
 {
     qname: QN,
     qtype: QT,
-    qclass: QuestionClass
+    qclass: RecordClass
 }
 
 impl Default for QuestionBuilder<FqdnUnset, QuestionTypeUnset> {
@@ -105,7 +56,7 @@ impl Default for QuestionBuilder<FqdnUnset, QuestionTypeUnset> {
         QuestionBuilder {
             qname: FqdnUnset,
             qtype: QuestionTypeUnset,
-            qclass: QuestionClass::IN
+            qclass: RecordClass::IN
         }
     }
 }
@@ -114,13 +65,13 @@ impl Question {
     pub fn from_bytes(decoder: &mut BinReader) -> QuestionResult<Question> {
         let qname = Fqdn::from_bytes(decoder).map_err(|_| QuestionError::NameReadingError)?;
 
-        let qtype = QuestionType::from(
+        let qtype = RecordType::from(
             decoder
                 .read_u16()
                 .map_err(|_| QuestionError::TypeReadingError)?,
         );
 
-        let qclass = QuestionClass::from(
+        let qclass = RecordClass::from(
             decoder
                 .read_u16()
                 .map_err(|_| QuestionError::ClassReadingError)?,
@@ -151,7 +102,7 @@ impl QuestionBuilder<FqdnUnset, QuestionTypeUnset> {
 }
 
 impl QuestionBuilder<FqdnSet, QuestionTypeUnset> {
-    pub fn question_type(self, qtype: QuestionType) -> QuestionBuilder<FqdnSet, QuestionTypeSet> {
+    pub fn question_type(self, qtype: RecordType) -> QuestionBuilder<FqdnSet, QuestionTypeSet> {
         QuestionBuilder {
             qname: self.qname,
             qtype: QuestionTypeSet(qtype),
@@ -175,7 +126,7 @@ where
     QN: FqdnState,
     QT: QuestionTypeState
 {
-    pub fn question_class(self, qclass: QuestionClass) -> QuestionBuilder<QN, QT> {
+    pub fn question_class(self, qclass: RecordClass) -> QuestionBuilder<QN, QT> {
         QuestionBuilder {
             qname: self.qname,
             qtype: self.qtype,
@@ -189,8 +140,8 @@ mod test {
     use crate::packet::bin_reader::BinReader;
     use crate::packet::fqdn::{FqdnBuilder};
     use crate::packet::question::{Question, QuestionBuilder};
-    use crate::packet::question::QuestionClass::IN;
-    use crate::packet::question::QuestionType::A;
+    use crate::packet::question::RecordClass::IN;
+    use crate::packet::question::RecordType::A;
 
     #[test]
     fn read_question_success() {
