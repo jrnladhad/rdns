@@ -12,6 +12,15 @@ pub enum HeaderFlagError {
     QueryWithRABitSet,
 }
 
+type HeaderFlagsBuilderUnset = HeaderFlagsBuilder<QrUnset, OpcodeUnset, AaUnset, TcUnset, RdUnset, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderQrSet = HeaderFlagsBuilder<QrSet, OpcodeUnset, AaUnset, TcUnset, RdUnset, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderOpcodeSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaUnset, TcUnset, RdUnset, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderAaSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcUnset, RdUnset, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderTcSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdUnset, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderRdSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdSet, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderRaSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdSet, RaSet, RcodeUnset>;
+type HeaderFlagsBuilderSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdSet, RaSet, RcodeSet>;
+
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum QR {
     Query,
@@ -24,12 +33,11 @@ impl Default for QR {
     }
 }
 
-impl From<u16> for QR {
-    fn from(value: u16) -> Self {
+impl From<bool> for QR {
+    fn from(value: bool) -> Self {
         match value {
-            0 => QR::Query,
-            1 => QR::Response,
-            _ => QR::Query,
+            true => QR::Response,
+            false => QR::Query
         }
     }
 }
@@ -90,7 +98,7 @@ impl TryFrom<u16> for Rcode {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct HeaderFlags {
     query_or_response: QR,
     opcode: Opcode,
@@ -102,68 +110,187 @@ pub struct HeaderFlags {
     response_code: Rcode,
 }
 
-pub struct HeaderFlagsBuilder {
-    query_or_response: QR,
-    opcode: Opcode,
-    authoritative_answer: bool,
-    truncation: bool,
-    recursion_desired: bool,
-    recursion_available: bool,
+#[derive(Default, Clone)]
+pub struct QrUnset;
+#[derive(Default, Clone)]
+pub struct QrSet(QR);
+
+trait QrState {}
+impl QrState for QrUnset {}
+impl QrState for QrSet {}
+
+#[derive(Default, Clone)]
+pub struct OpcodeUnset;
+#[derive(Default, Clone)]
+pub struct OpcodeSet(Opcode);
+
+trait OpcodeState {}
+impl OpcodeState for OpcodeUnset {}
+impl OpcodeState for OpcodeSet {}
+
+#[derive(Default, Clone)]
+pub struct AaUnset;
+#[derive(Default, Clone)]
+pub struct AaSet(bool);
+
+trait AaState {}
+impl AaState for AaUnset {}
+impl AaState for AaSet {}
+
+#[derive(Default, Clone)]
+pub struct TcUnset;
+#[derive(Default, Clone)]
+pub struct TcSet(bool);
+
+trait TcState {}
+impl TcState for TcUnset {}
+impl TcState for TcSet {}
+
+#[derive(Default, Clone)]
+pub struct RdUnset;
+#[derive(Default, Clone)]
+pub struct RdSet(bool);
+
+trait RdState {}
+impl RdState for RdUnset {}
+impl RdState for RdSet {}
+
+#[derive(Default, Clone)]
+pub struct RaUnset;
+#[derive(Default, Clone)]
+pub struct RaSet(bool);
+
+trait RaState {}
+impl RaState for RaUnset {}
+impl RaState for RaSet {}
+
+#[derive(Default, Clone)]
+pub struct RcodeUnset;
+#[derive(Default, Clone)]
+pub struct RcodeSet(Rcode);
+
+trait RcodeState {}
+impl RcodeState for RcodeUnset {}
+impl RcodeState for RcodeSet {}
+
+#[derive(Default, Clone)]
+pub struct HeaderFlagsBuilder<Q, O, A, T, RD, RA, RC>
+where
+    Q: QrState,
+    O: OpcodeState,
+    A: AaState,
+    T: TcState,
+    RD: RdState,
+    RA: RaState,
+    RC: RcodeState
+{
+    query_or_response: Q,
+    opcode: O,
+    authoritative_answer: A,
+    truncation: T,
+    recursion_desired: RD,
+    recursion_available: RA,
     zero: u8,
-    response_code: Rcode,
+    response_code: RC,
 }
 
-impl HeaderFlagsBuilder {
-    pub fn new() -> Self {
-        Self {
-            query_or_response: QR::default(),
-            opcode: Opcode::default(),
-            authoritative_answer: bool::default(),
-            truncation: bool::default(),
-            recursion_desired: bool::default(),
-            recursion_available: bool::default(),
-            zero: u8::default(),
-            response_code: Rcode::default(),
+impl HeaderFlagsBuilderUnset {
+    pub fn new () -> Self {
+        HeaderFlagsBuilder::default()
+    }
+
+    pub fn query_or_response(self, qr: QR) -> HeaderFlagsBuilderQrSet {
+        HeaderFlagsBuilder {
+            query_or_response: QrSet(qr),
+            opcode: self.opcode,
+            authoritative_answer: self.authoritative_answer,
+            truncation: self.truncation,
+            recursion_desired: self.recursion_desired,
+            recursion_available: self.recursion_available,
+            zero: self.zero,
+            response_code: self.response_code
         }
     }
+}
 
-    pub fn query_or_response(&mut self, qr: QR) -> &mut Self {
-        self.query_or_response = qr;
-        self
+impl HeaderFlagsBuilderQrSet {
+    pub fn opcode(self, opcode: Opcode) -> HeaderFlagsBuilderOpcodeSet {
+        HeaderFlagsBuilder {
+            query_or_response: self.query_or_response,
+            opcode: OpcodeSet(opcode),
+            authoritative_answer: self.authoritative_answer,
+            truncation: self.truncation,
+            recursion_desired: self.recursion_desired,
+            recursion_available: self.recursion_available,
+            zero: self.zero,
+            response_code: self.response_code
+        }
     }
+}
 
-    pub fn opcode(&mut self, opcode: Opcode) -> &mut Self {
-        self.opcode = opcode;
-        self
+impl HeaderFlagsBuilderOpcodeSet {
+    pub fn authoritative_answer(self, authoritative_answer: bool) -> HeaderFlagsBuilderAaSet {
+        HeaderFlagsBuilder {
+            query_or_response: self.query_or_response,
+            opcode: self.opcode,
+            authoritative_answer: AaSet(authoritative_answer),
+            truncation: self.truncation,
+            recursion_desired: self.recursion_desired,
+            recursion_available: self.recursion_available,
+            zero: self.zero,
+            response_code: self.response_code
+        }
     }
+}
 
-    pub fn authoritative_answer(&mut self, authoritative_answer: bool) -> &mut Self {
-        self.authoritative_answer = authoritative_answer;
-        self
+impl HeaderFlagsBuilderAaSet {
+    pub fn truncation(self, truncation: bool) -> HeaderFlagsBuilderTcSet {
+        HeaderFlagsBuilder {
+            query_or_response: self.query_or_response,
+            opcode: self.opcode,
+            authoritative_answer: self.authoritative_answer,
+            truncation: TcSet(truncation),
+            recursion_desired: self.recursion_desired,
+            recursion_available: self.recursion_available,
+            zero: self.zero,
+            response_code: self.response_code
+        }
     }
+}
 
-    pub fn truncation(&mut self, truncation: bool) -> &mut Self {
-        self.truncation = truncation;
-        self
+impl HeaderFlagsBuilderTcSet {
+    pub fn recursion_desired(self, recursion_desired: bool) -> HeaderFlagsBuilderRdSet {
+        HeaderFlagsBuilder {
+            query_or_response: self.query_or_response,
+            opcode: self.opcode,
+            authoritative_answer: self.authoritative_answer,
+            truncation: self.truncation,
+            recursion_desired: RdSet(recursion_desired),
+            recursion_available: self.recursion_available,
+            zero: self.zero,
+            response_code: self.response_code
+        }
     }
+}
 
-    pub fn recursion_desired(&mut self, recursion_desired: bool) -> &mut Self {
-        self.recursion_desired = recursion_desired;
-        self
+impl HeaderFlagsBuilderRdSet {
+    pub fn recursion_available(self, recursion_available: bool) -> HeaderFlagsBuilderRaSet {
+        HeaderFlagsBuilder {
+            query_or_response: self.query_or_response,
+            opcode: self.opcode,
+            authoritative_answer: self.authoritative_answer,
+            truncation: self.truncation,
+            recursion_desired: self.recursion_desired,
+            recursion_available: RaSet(recursion_available),
+            zero: self.zero,
+            response_code: self.response_code
+        }
     }
+}
 
-    pub fn recursion_available(&mut self, recursion_available: bool) -> &mut Self {
-        self.recursion_available = recursion_available;
-        self
-    }
-
-    pub fn response_code(&mut self, response_code: Rcode) -> &mut Self {
-        self.response_code = response_code;
-        self
-    }
-
-    pub fn build(&mut self) -> HeaderFlags {
-        HeaderFlags {
+impl HeaderFlagsBuilderRaSet {
+    pub fn response_code(self, response_code: Rcode) -> HeaderFlagsBuilderSet {
+        HeaderFlagsBuilder {
             query_or_response: self.query_or_response,
             opcode: self.opcode,
             authoritative_answer: self.authoritative_answer,
@@ -171,7 +298,22 @@ impl HeaderFlagsBuilder {
             recursion_desired: self.recursion_desired,
             recursion_available: self.recursion_available,
             zero: self.zero,
-            response_code: self.response_code,
+            response_code: RcodeSet(response_code)
+        }
+    }
+}
+
+impl HeaderFlagsBuilderSet {
+    pub fn build(self) -> HeaderFlags {
+        HeaderFlags {
+            query_or_response: self.query_or_response.0,
+            opcode: self.opcode.0,
+            authoritative_answer: self.authoritative_answer.0,
+            truncation: self.truncation.0,
+            recursion_desired: self.recursion_desired.0,
+            recursion_available: self.recursion_available.0,
+            zero: self.zero,
+            response_code: self.response_code.0
         }
     }
 }
@@ -188,7 +330,7 @@ impl TryFrom<u16> for HeaderFlags {
         const ZERO_MASK: u16 = 7 << 4;
         const RC_MASK: u16 = 15;
 
-        let query_or_response = QR::from((value & QR_MASK) >> 15);
+        let query_or_response = QR::from((value & QR_MASK) != 0);
 
         let opcode = Opcode::try_from((value & OPCODE_MASK) >> 11)?;
 
@@ -209,24 +351,21 @@ impl TryFrom<u16> for HeaderFlags {
             return Err(HeaderFlagError::QueryWithRABitSet);
         }
 
-        Ok(HeaderFlags {
-            query_or_response,
-            opcode,
-            authoritative_answer,
-            truncation,
-            recursion_desired,
-            recursion_available,
-            zero,
-            response_code,
-        })
+        let header_flags = HeaderFlagsBuilder::new()
+            .query_or_response(query_or_response)
+            .opcode(opcode)
+            .authoritative_answer(authoritative_answer)
+            .truncation(truncation)
+            .recursion_desired(recursion_desired)
+            .recursion_available(recursion_available)
+            .response_code(response_code)
+            .build();
+
+        Ok(header_flags)
     }
 }
 
 impl HeaderFlags {
-    pub fn builder() -> HeaderFlagsBuilder {
-        HeaderFlagsBuilder::new()
-    }
-
     pub fn query_or_response(&self) -> &QR {
         &self.query_or_response
     }

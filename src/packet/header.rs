@@ -14,9 +14,32 @@ pub enum HeaderError {
     InsufficientData(usize),
     #[error("Flag errors")]
     FlagError,
+    #[error("No XID provided for the message")]
+    MissingId,
+    #[error("Message has {0} questions, currently only supports 1")]
+    IncorrectQuestionCount(u16),
 }
 
 type HeaderResult<T> = Result<T, HeaderError>;
+
+// Different states for the Header builder
+#[derive(Default, Clone)]
+struct IdUnset;
+#[derive(Default, Clone)]
+struct IdSet(u16);
+
+trait IdState {}
+impl IdState for IdUnset {}
+impl IdState for IdSet {}
+
+#[derive(Default, Clone)]
+struct FlagsUnset;
+#[derive(Default, Clone)]
+struct FlagsSet(HeaderFlags);
+
+trait FlagState {}
+impl FlagState for FlagsUnset {}
+impl FlagState for FlagsSet {}
 
 #[derive(Debug, PartialEq)]
 pub struct Header {
@@ -26,6 +49,33 @@ pub struct Header {
     answer_count: u16,
     authoritative_count: u16,
     additional_count: u16,
+}
+
+#[derive(Clone)]
+pub struct HeaderBuilder<I, F>
+where
+    I: IdState,
+    F: FlagState,
+{
+    id: I,
+    flags: F,
+    question_count: u16,
+    answer_count: u16,
+    authoritative_count: u16,
+    additional_count: u16,
+}
+
+impl Default for HeaderBuilder<IdUnset, FlagsUnset> {
+    fn default() -> Self {
+        HeaderBuilder {
+            id: IdUnset,
+            flags: FlagsUnset,
+            question_count: 0,
+            answer_count: 0,
+            authoritative_count: 0,
+            additional_count: 0,
+        }
+    }
 }
 
 impl Header {
@@ -44,6 +94,12 @@ impl Header {
             .read_u16()
             .map_err(|_| HeaderError::InsufficientData(2))?;
 
+        match question_count {
+            0 => return Err(HeaderError::IncorrectQuestionCount(0)),
+            1 => question_count,
+            _ => return Err(HeaderError::IncorrectQuestionCount(question_count)),
+        };
+
         let answer_count = decoder
             .read_u16()
             .map_err(|_| HeaderError::InsufficientData(2))?;
@@ -56,18 +112,16 @@ impl Header {
             .read_u16()
             .map_err(|_| HeaderError::InsufficientData(2))?;
 
-        Ok(Header {
-            id,
-            flags,
-            question_count,
-            answer_count,
-            authoritative_count,
-            additional_count,
-        })
-    }
+        let header = HeaderBuilder::new()
+            .id(id)
+            .flags(flags)
+            .question_count(question_count)
+            .answer_count(answer_count)
+            .authoritative_count(authoritative_count)
+            .additional_count(additional_count)
+            .build();
 
-    pub fn builder(flags: HeaderFlags) -> HeaderBuilder {
-        HeaderBuilder::new(flags)
+        Ok(header)
     }
 
     pub fn id(&self) -> u16 {
@@ -95,56 +149,61 @@ impl Header {
     }
 }
 
-pub struct HeaderBuilder {
-    id: u16,
-    flags: HeaderFlags,
-    question_count: u16,
-    answer_count: u16,
-    authoritative_count: u16,
-    additional_count: u16,
-}
+impl HeaderBuilder<IdUnset, FlagsUnset> {
+    pub fn new() -> Self {
+        HeaderBuilder::default()
+    }
 
-impl HeaderBuilder {
-    pub fn new(flags: HeaderFlags) -> Self {
-        Self {
-            id: 0,
-            flags,
-            question_count: 0,
-            answer_count: 0,
-            additional_count: 0,
-            authoritative_count: 0,
+    pub fn id(self, id: u16) -> HeaderBuilder<IdSet, FlagsUnset> {
+        HeaderBuilder {
+            id: IdSet(id),
+            flags: self.flags,
+            question_count: self.question_count,
+            answer_count: self.answer_count,
+            authoritative_count: self.authoritative_count,
+            additional_count: self.additional_count,
         }
     }
+}
 
-    pub fn id(&mut self, id: u16) -> &mut Self {
-        self.id = id;
-        self
+impl HeaderBuilder<IdSet, FlagsUnset> {
+    pub fn flags(self, flags: HeaderFlags) -> HeaderBuilder<IdSet, FlagsSet> {
+        HeaderBuilder {
+            id: self.id,
+            flags: FlagsSet(flags),
+            question_count: self.question_count,
+            answer_count: self.answer_count,
+            authoritative_count: self.authoritative_count,
+            additional_count: self.additional_count,
+        }
     }
+}
 
-    pub fn question_count(&mut self, question_count: u16) -> &mut Self {
+impl HeaderBuilder<IdSet, FlagsSet> {
+    pub fn question_count(mut self, question_count: u16) -> Self {
         self.question_count = question_count;
         self
     }
 
-    pub fn answer_count(&mut self, answer_count: u16) -> &mut Self {
+    pub fn answer_count(mut self, answer_count: u16) -> Self {
         self.answer_count = answer_count;
         self
     }
 
-    pub fn additional_count(&mut self, additional_count: u16) -> &mut Self {
-        self.additional_count = additional_count;
-        self
-    }
-
-    pub fn authoritative_count(&mut self, authoritative_count: u16) -> &mut Self {
+    pub fn authoritative_count(mut self, authoritative_count: u16) -> Self {
         self.authoritative_count = authoritative_count;
         self
     }
 
-    pub fn build(&mut self) -> Header {
+    pub fn additional_count(mut self, additional_count: u16) -> Self {
+        self.additional_count = additional_count;
+        self
+    }
+
+    pub fn build(self) -> Header {
         Header {
-            id: self.id,
-            flags: self.flags,
+            id: self.id.0,
+            flags: self.flags.0,
             question_count: self.question_count,
             answer_count: self.answer_count,
             authoritative_count: self.authoritative_count,
@@ -156,8 +215,8 @@ impl HeaderBuilder {
 #[cfg(test)]
 mod test {
     use crate::packet::bin_reader::BinReader;
-    use crate::packet::header::{Header, HeaderError};
-    use crate::packet::header_flags::{HeaderFlags, Opcode, Rcode, QR};
+    use crate::packet::header::{Header, HeaderBuilder, HeaderError};
+    use crate::packet::header_flags::{HeaderFlagsBuilder, Opcode, Rcode, QR};
 
     #[test]
     fn read_query_header_success() {
@@ -165,7 +224,7 @@ mod test {
             0xf2, 0xe8, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let expected_header_flags = HeaderFlags::builder()
+        let expected_header_flags = HeaderFlagsBuilder::new()
             .query_or_response(QR::Query)
             .opcode(Opcode::Query)
             .authoritative_answer(false)
@@ -175,8 +234,9 @@ mod test {
             .response_code(Rcode::NoError)
             .build();
 
-        let expected_header = Header::builder(expected_header_flags)
+        let expected_header = HeaderBuilder::new()
             .id(62184)
+            .flags(expected_header_flags)
             .question_count(1)
             .answer_count(0)
             .authoritative_count(0)
@@ -195,7 +255,7 @@ mod test {
             0xf2, 0xe8, 0x81, 0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let expected_header_flags = HeaderFlags::builder()
+        let expected_header_flags = HeaderFlagsBuilder::new()
             .query_or_response(QR::Response)
             .opcode(Opcode::Query)
             .authoritative_answer(false)
@@ -205,8 +265,9 @@ mod test {
             .response_code(Rcode::NoError)
             .build();
 
-        let expected_header = Header::builder(expected_header_flags)
+        let expected_header = HeaderBuilder::new()
             .id(62184)
+            .flags(expected_header_flags)
             .question_count(1)
             .answer_count(1)
             .authoritative_count(0)

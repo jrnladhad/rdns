@@ -1,9 +1,10 @@
 use crate::packet::bin_reader::BinReader;
+use std::marker::PhantomData;
 use thiserror::Error;
 
 const PTR_MASK: u8 = 11 << 6;
 const OFFSET_MASK: u16 = 0x3FFF;
-const MAX_JUMP_REDIRECTION: u16 = 3;
+const MAX_REDIRECTIONS: u16 = 3;
 
 #[derive(Error, Debug)]
 pub enum FqdnError {
@@ -26,14 +27,19 @@ pub enum FqdnError {
     #[error("Too many redirections while reading name")]
     TooManyRedirections,
     #[error("Unable to read data from the buffer")]
-    InsufficientData
+    InsufficientData,
 }
+
+#[derive(Debug, Clone)]
+pub struct FqdnUnset;
+#[derive(Debug, Clone)]
+pub struct FqdnSet;
+
+trait FqdnState {}
+impl FqdnState for FqdnUnset {}
+impl FqdnState for FqdnSet {}
 
 pub type FqdnResult<T> = Result<T, FqdnError>;
-
-pub struct FQDN {
-    labels: Vec<String>,
-}
 
 enum FqdnParsingFSM {
     Start,
@@ -42,7 +48,135 @@ enum FqdnParsingFSM {
     End,
 }
 
-impl FQDN {
+#[derive(Debug, PartialEq, Clone)]
+pub struct Fqdn {
+    // TODO: This should be changed to a fixed array of size 64 and each label should be 256 char *
+    // this would allow us to put it on the stack, rather than on heap.
+    labels: Vec<String>
+}
+
+pub struct FqdnBuilder<S>
+where
+    S: FqdnState,
+{
+    labels: Vec<String>,
+    state: PhantomData<S>,
+}
+
+impl Fqdn {
+    pub fn from_bytes(decoder: &mut BinReader) -> FqdnResult<Fqdn> {
+        let fqdn = FqdnBuilder::new().generate_from_bytes(decoder)?.build();
+
+        Ok(fqdn)
+    }
+
+    pub fn to_str(&self) -> String {
+        let fqdn = self.labels.iter().fold(String::new(), |acc, label| {
+            if acc.is_empty() {
+                acc + label
+            } else {
+                acc + "." + label
+            }
+        });
+
+        fqdn
+    }
+}
+
+impl FqdnBuilder<FqdnUnset> {
+    pub fn new() -> Self {
+        FqdnBuilder {
+            labels: Vec::with_capacity(64),
+            state: PhantomData,
+        }
+    }
+
+    pub fn generate_from_bytes(
+        mut self,
+        decoder: &mut BinReader,
+    ) -> FqdnResult<FqdnBuilder<FqdnSet>> {
+        let _ = self.generate_labels_recursively(decoder, 0)?;
+
+        Ok(FqdnBuilder {
+            labels: self.labels,
+            state: PhantomData,
+        })
+    }
+
+    pub fn generate_from_string(self, qname: String) -> FqdnBuilder<FqdnSet> {
+        let labels: Vec<&str> = qname.split('.').collect();
+        let mut final_labels: Vec<String> = Vec::new();
+
+        for label in labels {
+            final_labels.push(label.to_owned());
+        }
+
+        FqdnBuilder {
+            labels: final_labels,
+            state: PhantomData,
+        }
+    }
+
+    fn generate_labels_recursively(
+        &mut self,
+        decoder: &mut BinReader,
+        jump_count: u16,
+    ) -> FqdnResult<()> {
+        if jump_count > MAX_REDIRECTIONS {
+            return Err(FqdnError::TooManyRedirections);
+        }
+
+        let mut parsing_fsm = FqdnParsingFSM::Start;
+
+        loop {
+            parsing_fsm = match parsing_fsm {
+                FqdnParsingFSM::Start => Self::get_parsing_state(decoder)?,
+
+                FqdnParsingFSM::Length => {
+                    if self.labels.len() >= 255 {
+                        return Err(FqdnError::FqdnTooLong);
+                    }
+
+                    let label = Self::get_label(decoder)?;
+                    self.labels.push(label);
+
+                    FqdnParsingFSM::Start
+                }
+
+                FqdnParsingFSM::Pointer => {
+                    let label_ptr = decoder
+                        .read_u16()
+                        .map_err(|_| FqdnError::MissingLabelPointerOffset)?;
+
+                    let offset = label_ptr & OFFSET_MASK;
+                    let mut cloned_decoder = decoder.cheap_clone(offset);
+                    let _ =
+                        self.generate_labels_recursively(&mut cloned_decoder, jump_count + 1)?;
+
+                    FqdnParsingFSM::End
+                }
+
+                FqdnParsingFSM::End => {
+                    let _ = decoder.read_u8().map_err(|_| FqdnError::InsufficientData);
+                    break;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn get_parsing_state(decoder: &BinReader) -> FqdnResult<FqdnParsingFSM> {
+        let ptr_or_len = Some(decoder.peek().map_err(|_| FqdnError::MissingLabelLength)?);
+
+        match ptr_or_len {
+            Some(0) => Ok(FqdnParsingFSM::End),
+            Some(data) if data & PTR_MASK == PTR_MASK => Ok(FqdnParsingFSM::Pointer),
+            Some(data) if data & PTR_MASK != PTR_MASK => Ok(FqdnParsingFSM::Length),
+            Some(_) | None => Err(FqdnError::MalformedLenOrPtrInfo),
+        }
+    }
+
     fn get_label(decoder: &mut BinReader) -> FqdnResult<String> {
         let label_len = decoder
             .read_u8()
@@ -62,92 +196,20 @@ impl FQDN {
 
         Ok(label)
     }
+}
 
-    fn get_parsing_state(decoder: &BinReader) -> FqdnResult<FqdnParsingFSM> {
-        let ptr_or_len = Some(decoder.peek().map_err(|_| FqdnError::MissingLabelLength)?);
-
-        match ptr_or_len {
-            Some(0) => Ok(FqdnParsingFSM::End),
-            Some(data) if data & PTR_MASK == PTR_MASK => Ok(FqdnParsingFSM::Pointer),
-            Some(data) if data & PTR_MASK != PTR_MASK => Ok(FqdnParsingFSM::Length),
-            Some(_) | None => Err(FqdnError::MalformedLenOrPtrInfo),
+impl FqdnBuilder<FqdnSet> {
+    pub fn build(self) -> Fqdn {
+        Fqdn {
+            labels: self.labels,
         }
-    }
-
-    fn recursively_create_name(
-        decoder: &mut BinReader,
-        jump_count: u16,
-    ) -> FqdnResult<Vec<String>> {
-        if jump_count > MAX_JUMP_REDIRECTION {
-            return Err(FqdnError::TooManyRedirections);
-        }
-
-        let mut parsing_fsm = FqdnParsingFSM::Start;
-        let mut labels: Vec<String> = Vec::new();
-
-        loop {
-            parsing_fsm = match parsing_fsm {
-                FqdnParsingFSM::Start => Self::get_parsing_state(decoder)?,
-
-                FqdnParsingFSM::Length => {
-                    let label = Self::get_label(decoder)?;
-                    labels.push(label);
-
-                    if labels.len() > 255 {
-                        return Err(FqdnError::FqdnTooLong);
-                    }
-
-                    FqdnParsingFSM::Start
-                }
-
-                FqdnParsingFSM::Pointer => {
-                    let label_ptr = decoder
-                        .read_u16()
-                        .map_err(|_| FqdnError::MissingLabelPointerOffset)?;
-
-                    let offset = label_ptr & OFFSET_MASK;
-                    let mut cloned_decoder = decoder.cheap_clone(offset);
-                    let mut parsed_labels =
-                        Self::recursively_create_name(&mut cloned_decoder, jump_count + 1)?;
-
-                    labels.append(&mut parsed_labels);
-
-                    FqdnParsingFSM::End
-                }
-
-                FqdnParsingFSM::End => {
-                    let _ = decoder.read_u8().map_err(|_| FqdnError::InsufficientData);
-                    break
-                },
-            }
-        }
-
-        Ok(labels)
-    }
-
-    pub fn from_bytes(decoder: &mut BinReader) -> FqdnResult<FQDN> {
-        let labels = Self::recursively_create_name(decoder, 0)?;
-
-        Ok(FQDN { labels })
-    }
-
-    pub fn to_str(&self) -> String {
-        let fqdn = self.labels.iter().fold(String::new(), |acc, label| {
-            if acc.is_empty() {
-                acc + label
-            } else {
-                acc + "." + label
-            }
-        });
-
-        fqdn
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::packet::bin_reader::BinReader;
-    use crate::packet::fqdn::FQDN;
+    use crate::packet::fqdn::Fqdn;
 
     #[test]
     fn read_name_all_lower() {
@@ -158,7 +220,7 @@ mod test {
         let expected = String::from("www.google.com");
 
         let mut decoder = BinReader::new(&packet_bytes);
-        let fqdn = FQDN::from_bytes(&mut decoder).unwrap();
+        let fqdn = Fqdn::from_bytes(&mut decoder).unwrap();
 
         assert_eq!(fqdn.to_str(), expected);
     }
@@ -176,7 +238,7 @@ mod test {
         let decoder = BinReader::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(32);
 
-        let fqdn = FQDN::from_bytes(&mut decoder).unwrap();
+        let fqdn = Fqdn::from_bytes(&mut decoder).unwrap();
 
         assert_eq!(fqdn.to_str(), expected);
     }
@@ -194,7 +256,7 @@ mod test {
         let decoder = BinReader::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(20);
 
-        let fqdn = FQDN::from_bytes(&mut decoder).unwrap();
+        let fqdn = Fqdn::from_bytes(&mut decoder).unwrap();
 
         assert_eq!(fqdn.to_str(), expected);
     }
@@ -212,7 +274,7 @@ mod test {
         let decoder = BinReader::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(15);
 
-        let fqdn = FQDN::from_bytes(&mut decoder).unwrap();
+        let fqdn = Fqdn::from_bytes(&mut decoder).unwrap();
 
         assert_eq!(fqdn.to_str(), expected);
     }
