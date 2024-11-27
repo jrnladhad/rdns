@@ -127,6 +127,7 @@ impl FqdnBuilder<FqdnUnset> {
             return Err(FqdnError::TooManyRedirections);
         }
 
+        let mut is_indirection = false;
         let mut parsing_fsm = FqdnParsingFSM::Start;
 
         loop {
@@ -153,12 +154,17 @@ impl FqdnBuilder<FqdnUnset> {
                     let mut cloned_decoder = decoder.cheap_clone(offset);
                     let _ =
                         self.generate_labels_recursively(&mut cloned_decoder, jump_count + 1)?;
+                    is_indirection = true;
 
                     FqdnParsingFSM::End
                 }
 
                 FqdnParsingFSM::End => {
-                    let _ = decoder.read_u8().map_err(|_| FqdnError::InsufficientData);
+                    if is_indirection == false
+                    {
+                        let _ = decoder.read_u8().map_err(|_| FqdnError::InsufficientData);
+                    }
+
                     break;
                 }
             }

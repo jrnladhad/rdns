@@ -5,8 +5,8 @@ use std::cmp::PartialEq;
 use thiserror::Error;
 
 // custom crates
-use super::bin_reader::BinReader;
-use crate::packet::header_flags::HeaderFlags;
+use crate::packet::bin_reader::BinReader;
+use crate::packet::headers::header_flags::HeaderFlags;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum HeaderError {
@@ -215,8 +215,8 @@ impl HeaderBuilder<IdSet, FlagsSet> {
 #[cfg(test)]
 mod test {
     use crate::packet::bin_reader::BinReader;
-    use crate::packet::header::{Header, HeaderBuilder, HeaderError};
-    use crate::packet::header_flags::{HeaderFlagsBuilder, Opcode, Rcode, QR};
+    use crate::packet::headers::header::{Header, HeaderBuilder, HeaderError};
+    use crate::packet::headers::header_flags::{HeaderFlagsBuilder, Opcode, Rcode, QR};
 
     #[test]
     fn read_query_header_success() {

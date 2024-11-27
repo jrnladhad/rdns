@@ -11,15 +11,15 @@ pub enum BinReaderError {
 pub type BinReaderResult<T> = Result<T, BinReaderError>;
 
 pub struct BinReader<'a> {
-    bin_data: &'a[u8],
-    cursor: u16
+    bin_data: &'a [u8],
+    cursor: u16,
 }
 
 impl<'a> BinReader<'a> {
     pub fn new(bin_data: &'a [u8]) -> BinReader<'a> {
         BinReader {
             bin_data,
-            cursor: 0
+            cursor: 0,
         }
     }
 
@@ -27,15 +27,14 @@ impl<'a> BinReader<'a> {
         self.bin_data.len()
     }
 
-    pub fn read_n_bytes(&mut self, n: u16) -> BinReaderResult<&[u8]>
-    {
+    pub fn read_n_bytes(&mut self, n: u16) -> BinReaderResult<&[u8]> {
         let buf_len = self.buf_len() as u16;
 
         if self.cursor >= buf_len || self.cursor + n > buf_len {
             return Err(BinReaderError::TooMuchDataRequested(n));
         }
 
-        let data = &self.bin_data[(self.cursor as usize).. (self.cursor + n) as usize];
+        let data = &self.bin_data[(self.cursor as usize)..(self.cursor + n) as usize];
         self.cursor += n;
 
         Ok(data)
@@ -59,9 +58,18 @@ impl<'a> BinReader<'a> {
         Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 
+    pub fn read_u128(&mut self) -> BinReaderResult<u128> {
+        let bytes = self.read_n_bytes(16)?;
+
+        Ok(u128::from_be_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15],
+        ]))
+    }
+
     pub fn peek(&self) -> BinReaderResult<u8> {
         if self.cursor as usize >= self.bin_data.len() {
-            return Err(BinReaderError::ReaderIsPastTheDataBuffer)
+            return Err(BinReaderError::ReaderIsPastTheDataBuffer);
         }
 
         Ok(self.bin_data[self.cursor as usize])
@@ -70,7 +78,7 @@ impl<'a> BinReader<'a> {
     pub fn cheap_clone(&self, cursor: u16) -> Self {
         BinReader {
             bin_data: self.bin_data,
-            cursor
+            cursor,
         }
     }
 }

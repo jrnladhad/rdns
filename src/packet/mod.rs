@@ -1,9 +1,6 @@
 pub mod message;
-mod bin_reader;
+pub(crate) mod bin_reader;
 mod fqdn;
-mod header;
-mod header_flags;
 mod question;
 mod record;
-mod record_type;
-mod record_class;
+mod headers;

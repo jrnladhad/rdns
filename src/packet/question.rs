@@ -1,7 +1,7 @@
 use crate::packet::bin_reader::BinReader;
 use crate::packet::fqdn::Fqdn;
-use crate::packet::record_type::RecordType;
-use crate::packet::record_class::RecordClass;
+use crate::records::record_type::RecordType;
+use crate::records::record_class::RecordClass;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
