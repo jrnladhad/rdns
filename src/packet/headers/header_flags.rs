@@ -1,3 +1,4 @@
+use crate::packet::seder::serializer::Serialize;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -10,16 +11,28 @@ pub enum HeaderFlagError {
     ZeroFlagUnset,
     #[error("A query cannot have RA bit set")]
     QueryWithRABitSet,
+    #[error("The authoritative answer bit is set for a query")]
+    AuthoritativeAnswerBitSetOnQuery,
+    #[error("The truncation bit is set for a query")]
+    TruncationBitSetOnQuery,
 }
 
-type HeaderFlagsBuilderUnset = HeaderFlagsBuilder<QrUnset, OpcodeUnset, AaUnset, TcUnset, RdUnset, RaUnset, RcodeUnset>;
-type HeaderFlagsBuilderQrSet = HeaderFlagsBuilder<QrSet, OpcodeUnset, AaUnset, TcUnset, RdUnset, RaUnset, RcodeUnset>;
-type HeaderFlagsBuilderOpcodeSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaUnset, TcUnset, RdUnset, RaUnset, RcodeUnset>;
-type HeaderFlagsBuilderAaSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcUnset, RdUnset, RaUnset, RcodeUnset>;
-type HeaderFlagsBuilderTcSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdUnset, RaUnset, RcodeUnset>;
-type HeaderFlagsBuilderRdSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdSet, RaUnset, RcodeUnset>;
-type HeaderFlagsBuilderRaSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdSet, RaSet, RcodeUnset>;
-type HeaderFlagsBuilderSet = HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdSet, RaSet, RcodeSet>;
+type HeaderFlagsBuilderUnset =
+    HeaderFlagsBuilder<QrUnset, OpcodeUnset, AaUnset, TcUnset, RdUnset, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderQrSet =
+    HeaderFlagsBuilder<QrSet, OpcodeUnset, AaUnset, TcUnset, RdUnset, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderOpcodeSet =
+    HeaderFlagsBuilder<QrSet, OpcodeSet, AaUnset, TcUnset, RdUnset, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderAaSet =
+    HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcUnset, RdUnset, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderTcSet =
+    HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdUnset, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderRdSet =
+    HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdSet, RaUnset, RcodeUnset>;
+type HeaderFlagsBuilderRaSet =
+    HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdSet, RaSet, RcodeUnset>;
+type HeaderFlagsBuilderSet =
+    HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdSet, RaSet, RcodeSet>;
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum QR {
@@ -37,7 +50,7 @@ impl From<bool> for QR {
     fn from(value: bool) -> Self {
         match value {
             true => QR::Response,
-            false => QR::Query
+            false => QR::Query,
         }
     }
 }
@@ -106,12 +119,11 @@ pub struct HeaderFlags {
     truncation: bool,
     recursion_desired: bool,
     recursion_available: bool,
-    zero: u8,
     response_code: Rcode,
 }
 
 #[derive(Default, Clone)]
-pub struct QrUnset;
+struct QrUnset;
 #[derive(Default, Clone)]
 pub struct QrSet(QR);
 
@@ -174,7 +186,7 @@ impl RcodeState for RcodeUnset {}
 impl RcodeState for RcodeSet {}
 
 #[derive(Default, Clone)]
-pub struct HeaderFlagsBuilder<Q, O, A, T, RD, RA, RC>
+pub(self) struct HeaderFlagsBuilder<Q, O, A, T, RD, RA, RC>
 where
     Q: QrState,
     O: OpcodeState,
@@ -182,7 +194,7 @@ where
     T: TcState,
     RD: RdState,
     RA: RaState,
-    RC: RcodeState
+    RC: RcodeState,
 {
     query_or_response: Q,
     opcode: O,
@@ -190,14 +202,35 @@ where
     truncation: T,
     recursion_desired: RD,
     recursion_available: RA,
-    zero: u8,
     response_code: RC,
 }
 
 impl HeaderFlagsBuilderUnset {
-    pub fn new () -> Self {
+    pub fn new() -> Self {
         HeaderFlagsBuilder::default()
     }
+
+    pub fn query(
+        self,
+    ) -> HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdUnset, RaSet, RcodeSet> {
+        HeaderFlagsBuilder {
+            query_or_response: QrSet(QR::Query),
+            opcode: OpcodeSet(Opcode::Query),
+            authoritative_answer: AaSet(false),
+            truncation: TcSet(false),
+            recursion_desired: self.recursion_desired,
+            recursion_available: RaSet(false),
+            response_code: RcodeSet(Rcode::NoError),
+        }
+    }
+
+    // TODO: Think about this if we want specific response builders such as No_Error, SERVFAIL, ...
+    // pub fn response(
+    //     self,
+    //     _query_header_flags: &HeaderFlags,
+    // ) -> HeaderFlagsBuilder<QrSet, OpcodeSet, AaUnset, TcSet, RdSet, RaUnset, RcodeUnset> {
+    //     todo!();
+    // }
 
     pub fn query_or_response(self, qr: QR) -> HeaderFlagsBuilderQrSet {
         HeaderFlagsBuilder {
@@ -207,8 +240,21 @@ impl HeaderFlagsBuilderUnset {
             truncation: self.truncation,
             recursion_desired: self.recursion_desired,
             recursion_available: self.recursion_available,
-            zero: self.zero,
-            response_code: self.response_code
+            response_code: self.response_code,
+        }
+    }
+}
+
+impl HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdUnset, RaSet, RcodeSet> {
+    pub fn recursion_desired(self, rd: bool) -> HeaderFlagsBuilderSet {
+        HeaderFlagsBuilder {
+            query_or_response: self.query_or_response,
+            opcode: self.opcode,
+            authoritative_answer: self.authoritative_answer,
+            truncation: self.truncation,
+            recursion_desired: RdSet(rd),
+            recursion_available: self.recursion_available,
+            response_code: self.response_code,
         }
     }
 }
@@ -222,8 +268,7 @@ impl HeaderFlagsBuilderQrSet {
             truncation: self.truncation,
             recursion_desired: self.recursion_desired,
             recursion_available: self.recursion_available,
-            zero: self.zero,
-            response_code: self.response_code
+            response_code: self.response_code,
         }
     }
 }
@@ -237,8 +282,7 @@ impl HeaderFlagsBuilderOpcodeSet {
             truncation: self.truncation,
             recursion_desired: self.recursion_desired,
             recursion_available: self.recursion_available,
-            zero: self.zero,
-            response_code: self.response_code
+            response_code: self.response_code,
         }
     }
 }
@@ -252,8 +296,7 @@ impl HeaderFlagsBuilderAaSet {
             truncation: TcSet(truncation),
             recursion_desired: self.recursion_desired,
             recursion_available: self.recursion_available,
-            zero: self.zero,
-            response_code: self.response_code
+            response_code: self.response_code,
         }
     }
 }
@@ -267,8 +310,7 @@ impl HeaderFlagsBuilderTcSet {
             truncation: self.truncation,
             recursion_desired: RdSet(recursion_desired),
             recursion_available: self.recursion_available,
-            zero: self.zero,
-            response_code: self.response_code
+            response_code: self.response_code,
         }
     }
 }
@@ -282,8 +324,7 @@ impl HeaderFlagsBuilderRdSet {
             truncation: self.truncation,
             recursion_desired: self.recursion_desired,
             recursion_available: RaSet(recursion_available),
-            zero: self.zero,
-            response_code: self.response_code
+            response_code: self.response_code,
         }
     }
 }
@@ -297,8 +338,7 @@ impl HeaderFlagsBuilderRaSet {
             truncation: self.truncation,
             recursion_desired: self.recursion_desired,
             recursion_available: self.recursion_available,
-            zero: self.zero,
-            response_code: RcodeSet(response_code)
+            response_code: RcodeSet(response_code),
         }
     }
 }
@@ -312,8 +352,7 @@ impl HeaderFlagsBuilderSet {
             truncation: self.truncation.0,
             recursion_desired: self.recursion_desired.0,
             recursion_available: self.recursion_available.0,
-            zero: self.zero,
-            response_code: self.response_code.0
+            response_code: self.response_code.0,
         }
     }
 }
@@ -351,6 +390,14 @@ impl TryFrom<u16> for HeaderFlags {
             return Err(HeaderFlagError::QueryWithRABitSet);
         }
 
+        if query_or_response == QR::Query && authoritative_answer == true {
+            return Err(HeaderFlagError::AuthoritativeAnswerBitSetOnQuery);
+        }
+
+        if query_or_response == QR::Query && truncation == true {
+            return Err(HeaderFlagError::TruncationBitSetOnQuery);
+        }
+
         let header_flags = HeaderFlagsBuilder::new()
             .query_or_response(query_or_response)
             .opcode(opcode)
@@ -366,31 +413,124 @@ impl TryFrom<u16> for HeaderFlags {
 }
 
 impl HeaderFlags {
-    pub fn query_or_response(&self) -> &QR {
-        &self.query_or_response
+    const SET_QUESTION: u16 = 0 << 15;
+    const SET_RESPONSE: u16 = 1 << 15;
+
+    const SET_QUERY: u16 = 0 << 11;
+    const SET_IQUERY: u16 = 1 << 11;
+    const SET_STATUS: u16 = 2 << 11;
+
+    const SET_AA: u16 = 1 << 10;
+
+    const SET_TC: u16 = 1 << 9;
+
+    const SET_RD: u16 = 1 << 8;
+
+    const SET_RA: u16 = 1 << 7;
+
+    const SET_NO_ERROR: u16 = 0;
+    const SET_FORMAT_ERROR: u16 = 1;
+    const SET_SERVER_FAILURE: u16 = 2;
+    const SET_NAME_ERROR: u16 = 3;
+    const SET_NOT_IMPLEMENTED: u16 = 4;
+    const SET_REFUSED: u16 = 5;
+
+    pub fn into_bytes(self, encoder: &mut Serialize) {
+        let mut flags: u16 = 0;
+
+        flags = match self.query_or_response {
+            QR::Query => flags | HeaderFlags::SET_QUESTION,
+            QR::Response => flags | HeaderFlags::SET_RESPONSE,
+        };
+
+        flags = match self.opcode {
+            Opcode::Query => flags | HeaderFlags::SET_QUERY,
+            Opcode::Iquery => flags | HeaderFlags::SET_IQUERY,
+            Opcode::Status => flags | HeaderFlags::SET_STATUS,
+        };
+
+        flags = match self.authoritative_answer {
+            true => flags | HeaderFlags::SET_AA,
+            false => flags,
+        };
+
+        flags = match self.truncation {
+            true => flags | HeaderFlags::SET_TC,
+            false => flags,
+        };
+
+        flags = match self.recursion_desired {
+            true => flags | HeaderFlags::SET_RD,
+            false => flags,
+        };
+
+        flags = match self.recursion_available {
+            true => flags | HeaderFlags::SET_RA,
+            false => flags,
+        };
+
+        flags = match self.response_code {
+            Rcode::NoError => flags | HeaderFlags::SET_NO_ERROR,
+            Rcode::FormatError => flags | HeaderFlags::SET_FORMAT_ERROR,
+            Rcode::ServerFailure => flags | HeaderFlags::SET_SERVER_FAILURE,
+            Rcode::NameError => flags | HeaderFlags::SET_NAME_ERROR,
+            Rcode::NotImplemented => flags | HeaderFlags::SET_NOT_IMPLEMENTED,
+            Rcode::Refused => flags | HeaderFlags::SET_REFUSED,
+        };
+
+        encoder.write_u16(flags);
     }
 
-    pub fn opcode(&self) -> &Opcode {
-        &self.opcode
+    pub fn truncation(&mut self, tc: bool) {
+        self.truncation = tc
+    }
+}
+
+#[cfg(test)]
+pub mod header_flags_unittest {
+    use crate::packet::headers::header_flags::{
+        HeaderFlags, HeaderFlagsBuilder, Opcode, Rcode, QR,
+    };
+    use crate::packet::seder::serializer::Serialize;
+
+    pub fn generate_query_header_flags(rd: bool) -> HeaderFlags {
+        let header_flags = HeaderFlagsBuilder::new()
+            .query()
+            .recursion_desired(rd)
+            .build();
+
+        header_flags
     }
 
-    pub fn authoritative_answer(&self) -> bool {
-        self.authoritative_answer
+    pub fn generate_response_header_flag(
+        aa: bool,
+        tc: bool,
+        rd: bool,
+        ra: bool,
+        rcode: Rcode,
+    ) -> HeaderFlags {
+        let header_flags = HeaderFlagsBuilder::new()
+            .query_or_response(QR::Response)
+            .opcode(Opcode::Query)
+            .authoritative_answer(aa)
+            .truncation(tc)
+            .recursion_desired(rd)
+            .recursion_available(ra)
+            .response_code(rcode)
+            .build();
+
+        header_flags
     }
 
-    pub fn truncation(&self) -> bool {
-        self.truncation
-    }
+    #[test]
+    fn serialize_response_header_flag() {
+        let expected_bin_data: Vec<u8> = vec![0x81, 0x80];
 
-    pub fn recursion_desired(&self) -> bool {
-        self.recursion_desired
-    }
+        let header_flags = generate_response_header_flag(false, false, true, true, Rcode::NoError);
 
-    pub fn recursion_available(&self) -> bool {
-        self.recursion_available
-    }
+        let mut encoder = Serialize::new();
+        header_flags.into_bytes(&mut encoder);
 
-    pub fn response_code(&self) -> &Rcode {
-        &self.response_code
+        assert_eq!(encoder.bin_data(), expected_bin_data);
     }
 }

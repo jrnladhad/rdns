@@ -1,4 +1,5 @@
-use crate::packet::bin_reader::BinReader;
+use crate::packet::seder::deserializer::Deserialize;
+use crate::packet::seder::serializer::Serialize;
 use crate::packet::fqdn::Fqdn;
 use crate::records::record_type::RecordType;
 use crate::records::record_class::RecordClass;
@@ -62,20 +63,18 @@ impl Default for QuestionBuilder<FqdnUnset, QuestionTypeUnset> {
 }
 
 impl Question {
-    pub fn from_bytes(decoder: &mut BinReader) -> QuestionResult<Question> {
+    pub fn from_bytes(decoder: &mut Deserialize) -> QuestionResult<Question> {
         let qname = Fqdn::from_bytes(decoder).map_err(|_| QuestionError::NameReadingError)?;
 
-        let qtype = RecordType::from(
-            decoder
-                .read_u16()
-                .map_err(|_| QuestionError::TypeReadingError)?,
-        );
+        let qtype = decoder
+            .read_u16()
+            .map_err(|_| QuestionError::TypeReadingError)?;
+        let qtype = RecordType::from(qtype);
 
-        let qclass = RecordClass::from(
-            decoder
-                .read_u16()
-                .map_err(|_| QuestionError::ClassReadingError)?,
-        );
+        let qclass = decoder
+            .read_u16()
+            .map_err(|_| QuestionError::ClassReadingError)?;
+        let qclass = RecordClass::from(qclass);
 
         let question = QuestionBuilder::new()
             .question_name(qname)
@@ -135,13 +134,38 @@ where
     }
 }
 
+impl Question {
+    pub fn into_bytes(self, encoder: &mut Serialize) {
+        self.qname.into_bytes(encoder);
+
+        encoder.write_u16(self.qtype.into());
+        encoder.write_u16(self.qclass.into());
+    }
+}
+
+
 #[cfg(test)]
-mod test {
-    use crate::packet::bin_reader::BinReader;
+pub mod question_unittest {
+    use crate::packet::seder::deserializer::Deserialize;
+    use crate::packet::seder::serializer::Serialize;
     use crate::packet::fqdn::{FqdnBuilder};
     use crate::packet::question::{Question, QuestionBuilder};
     use crate::packet::question::RecordClass::IN;
     use crate::packet::question::RecordType::A;
+
+    pub fn get_google_a_question() -> Question {
+        let expected_qname = FqdnBuilder::new()
+            .generate_from_string(String::from("www.google.com"))
+            .build();
+
+        let expected_question = QuestionBuilder::new()
+            .question_name(expected_qname)
+            .question_class(IN)
+            .question_type(A)
+            .build();
+
+        expected_question
+    }
 
     #[test]
     fn read_question_success() {
@@ -161,9 +185,33 @@ mod test {
             .question_type(A)
             .build();
 
-        let mut decoder = BinReader::new(&packet_bytes);
+        let mut decoder = Deserialize::new(&packet_bytes);
         let actual_question = Question::from_bytes(&mut decoder).unwrap();
 
         assert_eq!(actual_question, expected_question);
+    }
+
+    #[test]
+    fn serialize_question() {
+        let expected_serialization: [u8; 20] = [
+            0x03, 0x77, 0x77, 0x77, 0x06, 0x67, 0x6f, 0x6f,
+            0x67, 0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00,
+            0x00, 0x01, 0x00, 0x01
+        ];
+
+        let qname = FqdnBuilder::new()
+            .generate_from_string(String::from("www.google.com"))
+            .build();
+
+        let question = QuestionBuilder::new()
+            .question_name(qname)
+            .question_class(IN)
+            .question_type(A)
+            .build();
+
+        let mut encoder = Serialize::new();
+        question.into_bytes(&mut encoder);
+
+        assert_eq!(encoder.bin_data(), expected_serialization);
     }
 }

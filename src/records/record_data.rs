@@ -1,9 +1,10 @@
-use crate::packet::bin_reader::BinReader;
+use crate::packet::seder::deserializer::Deserialize;
+use crate::packet::seder::serializer::Serialize;
+use crate::records::rdata::a::A;
+use crate::records::rdata::aaaa::AAAA;
 use crate::records::record_type::RecordType;
 use std::fmt::Debug;
 use thiserror::Error;
-use crate::records::rdata::a::A;
-use crate::records::rdata::aaaa::AAAA;
 
 #[derive(Error, Debug)]
 pub enum RecordDataError {
@@ -21,22 +22,28 @@ pub enum RecordData {
 }
 
 impl RecordData {
-    pub fn generate_record_data(
-        decoder: &mut BinReader,
+    pub fn from_bytes(
+        decoder: &mut Deserialize,
         record_type: &RecordType,
     ) -> Result<Self, RecordDataError> {
         match record_type {
             RecordType::A => {
-                let data = A::read_record_data(decoder)?;
+                let data = A::from_bytes(decoder)?;
                 Ok(RecordData::A(data))
-            },
+            }
             RecordType::AAAA => {
-                let data = AAAA::read_record_data(decoder)?;
+                let data = AAAA::from_bytes(decoder)?;
                 Ok(RecordData::AAAA(data))
             }
             _ => Err(RecordDataError::UnableToReadIpv4Address),
         }
     }
+
+    pub fn to_bytes(&self, encoder: &mut Serialize) {
+        match self {
+            RecordData::A(a_rdata) => a_rdata.to_bytes(encoder),
+            RecordData::AAAA(aaaa_rdata) => aaaa_rdata.to_bytes(encoder),
+            _ => {}
+        }
+    }
 }
-
-

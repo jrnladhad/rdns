@@ -1,11 +1,14 @@
-use crate::packet::bin_reader::BinReader;
 use std::marker::PhantomData;
 use thiserror::Error;
+use crate::packet::seder::deserializer::Deserialize;
+use crate::packet::seder::serializer::Serialize;
 
 const PTR_MASK: u8 = 11 << 6;
 const OFFSET_MASK: u16 = 0x3FFF;
+const POINTER_MARKER: u16 = 0xC0_00;
 const MAX_REDIRECTIONS: u16 = 3;
-const MAX_FQDN_LENGTH: usize = 255;
+const MAX_FQDN_LENGTH: u8 = 255;
+const MAX_LABEL_LENGTH: u8 = 63;
 
 #[derive(Error, Debug)]
 pub enum FqdnError {
@@ -21,6 +24,8 @@ pub enum FqdnError {
     IncorrectLabelEncoding,
     #[error("Byte does not represent the correct length or pointer")]
     MalformedLenOrPtrInfo,
+    #[error("Exceeding the limit of length of labels(63)")]
+    ExceedingMaxLabelLength,
     #[error("FQDN in the packet is exceeding the max limit")]
     FqdnTooLong,
     #[error("Offset provided in the packet does not point to existing FQDN in packet")]
@@ -51,8 +56,7 @@ enum FqdnParsingFSM {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Fqdn {
-    // TODO: This should be changed to a fixed array of size 64 and each label should be 256 char *
-    // this would allow us to put it on the stack, rather than on heap.
+    // TODO: AOI, if fixed array of size 64 is performant and secure. Could be put on stack
     labels: Vec<String>
 }
 
@@ -61,18 +65,50 @@ where
     S: FqdnState,
 {
     labels: Vec<String>,
+    fqdn_length: u8,
     state: PhantomData<S>,
 }
 
 impl Fqdn {
-    pub fn from_bytes(decoder: &mut BinReader) -> FqdnResult<Fqdn> {
+    pub fn from_bytes(decoder: &mut Deserialize) -> FqdnResult<Fqdn> {
         let fqdn = FqdnBuilder::new().generate_from_bytes(decoder)?.build();
 
         Ok(fqdn)
     }
 
-    pub fn to_str(&self) -> String {
-        let fqdn = self.labels.iter().fold(String::new(), |acc, label| {
+    pub fn to_owned_str(&self) -> String {
+        self.convert_to_string(0)
+    }
+
+    // TODO: naming convention says that this should be into_bytes
+    // article: https://github.com/rust-lang/rust-wiki-backup/blob/master/Doc-detailed-release-notes.md#cast-naming-conventions
+    pub fn into_bytes(self, encoder: &mut Serialize) {
+        let mut name_compressed = false;
+
+        for i in 0..self.labels.len() {
+            let label = &self.labels[i];
+            let partial_fqdn = self.convert_to_string(i);
+
+            match encoder.set_name_compression(partial_fqdn) {
+                None => encoder.write_string(label),
+                Some(pos) => {
+                    let offset = POINTER_MARKER | pos;
+                    encoder.write_u16(offset);
+                    name_compressed = true;
+                    break;
+                }
+            };
+        }
+
+        if name_compressed == false {
+            encoder.write_u8(0);
+        }
+    }
+
+    fn convert_to_string(&self, i: usize) -> String{
+        let labels = &self.labels[i..];
+
+        let fqdn = labels.iter().fold(String::new(), |acc, label| {
             if acc.is_empty() {
                 acc + label
             } else {
@@ -87,19 +123,21 @@ impl Fqdn {
 impl FqdnBuilder<FqdnUnset> {
     pub fn new() -> Self {
         FqdnBuilder {
-            labels: Vec::with_capacity(MAX_FQDN_LENGTH),
+            labels: Vec::with_capacity(MAX_FQDN_LENGTH as usize),
+            fqdn_length: 0,
             state: PhantomData,
         }
     }
 
     pub fn generate_from_bytes(
         mut self,
-        decoder: &mut BinReader,
+        decoder: &mut Deserialize,
     ) -> FqdnResult<FqdnBuilder<FqdnSet>> {
         let _ = self.generate_labels_recursively(decoder, 0)?;
 
         Ok(FqdnBuilder {
             labels: self.labels,
+            fqdn_length: self.fqdn_length,
             state: PhantomData,
         })
     }
@@ -114,13 +152,14 @@ impl FqdnBuilder<FqdnUnset> {
 
         FqdnBuilder {
             labels: final_labels,
+            fqdn_length: self.fqdn_length,
             state: PhantomData,
         }
     }
 
     fn generate_labels_recursively(
         &mut self,
-        decoder: &mut BinReader,
+        decoder: &mut Deserialize,
         jump_count: u16,
     ) -> FqdnResult<()> {
         if jump_count > MAX_REDIRECTIONS {
@@ -135,7 +174,13 @@ impl FqdnBuilder<FqdnUnset> {
                 FqdnParsingFSM::Start => Self::get_parsing_state(decoder)?,
 
                 FqdnParsingFSM::Length => {
-                    if self.labels.len() >= MAX_FQDN_LENGTH {
+                    let label_len = decoder.peek().map_err(|_| FqdnError::MissingLabelLength)?;
+                    if label_len > MAX_LABEL_LENGTH {
+                        return Err(FqdnError::ExceedingMaxLabelLength);
+                    }
+
+                    self.fqdn_length = self.fqdn_length + label_len;
+                    if self.fqdn_length >= MAX_FQDN_LENGTH {
                         return Err(FqdnError::FqdnTooLong);
                     }
 
@@ -173,7 +218,7 @@ impl FqdnBuilder<FqdnUnset> {
         Ok(())
     }
 
-    fn get_parsing_state(decoder: &BinReader) -> FqdnResult<FqdnParsingFSM> {
+    fn get_parsing_state(decoder: &Deserialize) -> FqdnResult<FqdnParsingFSM> {
         let ptr_or_len = Some(decoder.peek().map_err(|_| FqdnError::MissingLabelLength)?);
 
         match ptr_or_len {
@@ -184,12 +229,12 @@ impl FqdnBuilder<FqdnUnset> {
         }
     }
 
-    fn get_label(decoder: &mut BinReader) -> FqdnResult<String> {
+    fn get_label(decoder: &mut Deserialize) -> FqdnResult<String> {
         let label_len = decoder
             .read_u8()
             .map_err(|_| FqdnError::MissingLabelLength)?;
 
-        if label_len > 63 {
+        if label_len > MAX_LABEL_LENGTH {
             return Err(FqdnError::LabelLengthTooLong);
         }
 
@@ -214,8 +259,8 @@ impl FqdnBuilder<FqdnSet> {
 }
 
 #[cfg(test)]
-mod test {
-    use crate::packet::bin_reader::BinReader;
+mod fqdn_unittest {
+    use crate::packet::seder::deserializer::Deserialize;
     use crate::packet::fqdn::Fqdn;
 
     #[test]
@@ -226,10 +271,10 @@ mod test {
         ];
         let expected = String::from("www.google.com");
 
-        let mut decoder = BinReader::new(&packet_bytes);
+        let mut decoder = Deserialize::new(&packet_bytes);
         let fqdn = Fqdn::from_bytes(&mut decoder).unwrap();
 
-        assert_eq!(fqdn.to_str(), expected);
+        assert_eq!(fqdn.to_owned_str(), expected);
     }
 
     #[test]
@@ -242,12 +287,12 @@ mod test {
 
         let expected = String::from("www.google.com");
 
-        let decoder = BinReader::new(&packet_bytes);
+        let decoder = Deserialize::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(32);
 
         let fqdn = Fqdn::from_bytes(&mut decoder).unwrap();
 
-        assert_eq!(fqdn.to_str(), expected);
+        assert_eq!(fqdn.to_owned_str(), expected);
     }
 
     #[test]
@@ -260,12 +305,12 @@ mod test {
 
         let expected = String::from("b.root-servers.net");
 
-        let decoder = BinReader::new(&packet_bytes);
+        let decoder = Deserialize::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(20);
 
         let fqdn = Fqdn::from_bytes(&mut decoder).unwrap();
 
-        assert_eq!(fqdn.to_str(), expected);
+        assert_eq!(fqdn.to_owned_str(), expected);
     }
 
     #[test]
@@ -278,11 +323,11 @@ mod test {
 
         let expected = String::from("d.b.foo.com");
 
-        let decoder = BinReader::new(&packet_bytes);
+        let decoder = Deserialize::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(15);
 
         let fqdn = Fqdn::from_bytes(&mut decoder).unwrap();
 
-        assert_eq!(fqdn.to_str(), expected);
+        assert_eq!(fqdn.to_owned_str(), expected);
     }
 }

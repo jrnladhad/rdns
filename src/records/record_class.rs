@@ -18,3 +18,15 @@ impl From<u16> for RecordClass {
         }
     }
 }
+
+impl Into<u16> for RecordClass {
+    fn into(self) -> u16 {
+        match self {
+            RecordClass::IN => 1,
+            RecordClass::CH => 3,
+            RecordClass::HS => 4,
+            RecordClass::ANY => 255,
+            RecordClass::UNKNOWN => 256
+        }
+    }
+}

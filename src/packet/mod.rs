@@ -1,5 +1,5 @@
 pub mod message;
-pub(crate) mod bin_reader;
+pub mod seder;
 mod fqdn;
 mod question;
 mod record;

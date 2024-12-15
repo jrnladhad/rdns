@@ -1,2 +1,2 @@
 pub mod header;
-mod header_flags;
+pub(crate) mod header_flags;

@@ -1,23 +1,23 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum BinReaderError {
+pub enum DeserializeError {
     #[error("{0} data requested, not enough data in buffer")]
     TooMuchDataRequested(u16),
     #[error("Cursor is past the buffer size and no data can be read")]
     ReaderIsPastTheDataBuffer,
 }
 
-pub type BinReaderResult<T> = Result<T, BinReaderError>;
+pub type DeserializeResult<T> = Result<T, DeserializeError>;
 
-pub struct BinReader<'a> {
+pub struct Deserialize<'a> {
     bin_data: &'a [u8],
     cursor: u16,
 }
 
-impl<'a> BinReader<'a> {
-    pub fn new(bin_data: &'a [u8]) -> BinReader<'a> {
-        BinReader {
+impl<'a> Deserialize<'a> {
+    pub fn new(bin_data: &'a [u8]) -> Deserialize<'a> {
+        Deserialize {
             bin_data,
             cursor: 0,
         }
@@ -27,11 +27,11 @@ impl<'a> BinReader<'a> {
         self.bin_data.len()
     }
 
-    pub fn read_n_bytes(&mut self, n: u16) -> BinReaderResult<&[u8]> {
+    pub fn read_n_bytes(&mut self, n: u16) -> DeserializeResult<&[u8]> {
         let buf_len = self.buf_len() as u16;
 
         if self.cursor >= buf_len || self.cursor + n > buf_len {
-            return Err(BinReaderError::TooMuchDataRequested(n));
+            return Err(DeserializeError::TooMuchDataRequested(n));
         }
 
         let data = &self.bin_data[(self.cursor as usize)..(self.cursor + n) as usize];
@@ -40,25 +40,25 @@ impl<'a> BinReader<'a> {
         Ok(data)
     }
 
-    pub fn read_u8(&mut self) -> BinReaderResult<u8> {
+    pub fn read_u8(&mut self) -> DeserializeResult<u8> {
         let bytes = self.read_n_bytes(1)?;
 
         Ok(bytes[0])
     }
 
-    pub fn read_u16(&mut self) -> BinReaderResult<u16> {
+    pub fn read_u16(&mut self) -> DeserializeResult<u16> {
         let bytes = self.read_n_bytes(2)?;
 
         Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
     }
 
-    pub fn read_u32(&mut self) -> BinReaderResult<u32> {
+    pub fn read_u32(&mut self) -> DeserializeResult<u32> {
         let bytes = self.read_n_bytes(4)?;
 
         Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 
-    pub fn read_u128(&mut self) -> BinReaderResult<u128> {
+    pub fn read_u128(&mut self) -> DeserializeResult<u128> {
         let bytes = self.read_n_bytes(16)?;
 
         Ok(u128::from_be_bytes([
@@ -67,16 +67,16 @@ impl<'a> BinReader<'a> {
         ]))
     }
 
-    pub fn peek(&self) -> BinReaderResult<u8> {
+    pub fn peek(&self) -> DeserializeResult<u8> {
         if self.cursor as usize >= self.bin_data.len() {
-            return Err(BinReaderError::ReaderIsPastTheDataBuffer);
+            return Err(DeserializeError::ReaderIsPastTheDataBuffer);
         }
 
         Ok(self.bin_data[self.cursor as usize])
     }
 
     pub fn cheap_clone(&self, cursor: u16) -> Self {
-        BinReader {
+        Deserialize {
             bin_data: self.bin_data,
             cursor,
         }

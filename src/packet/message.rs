@@ -1,19 +1,21 @@
 use super::question::Question;
 use super::record::Record;
-use crate::packet::{bin_reader::BinReader, headers::header::Header};
+use crate::packet::headers::header::Header;
 use thiserror::Error;
+use crate::packet::seder::serializer::Serialize;
+use crate::packet::seder::deserializer::Deserialize;
 
 #[derive(Debug, Error)]
-enum MessageError {
-    #[error("Invalid header")]
+pub enum MessageError {
+    #[error("Invalid header section")]
     InvalidHeader,
-    #[error("Invalid question")]
+    #[error("Invalid question section")]
     InvalidQuestion,
-    #[error("Invalid answer")]
+    #[error("Invalid answer section")]
     InvalidAnswer,
-    #[error("Invalid authority")]
+    #[error("Invalid authority section")]
     InvalidAuthority,
-    #[error("Invalid additional")]
+    #[error("Invalid additional section")]
     InvalidAdditional,
 }
 
@@ -31,6 +33,7 @@ struct QuestionSet(Question);
 impl QuestionState for QuestionUnset {}
 impl QuestionState for QuestionSet {}
 
+#[derive(Debug, PartialEq)]
 pub struct Message {
     header: Header,
     question: Question,
@@ -39,7 +42,7 @@ pub struct Message {
     additional_records: Vec<Record>,
 }
 
-pub struct MessageBuilder<H, Q>
+pub(self) struct MessageBuilder<H, Q>
 where
     H: HeaderState,
     Q: QuestionState,
@@ -64,7 +67,7 @@ impl Default for MessageBuilder<HeaderUnset, QuestionUnset> {
 }
 
 impl Message {
-    pub fn from_bytes(decoder: &mut BinReader) -> Result<Message, MessageError> {
+    pub fn from_bytes(decoder: &mut Deserialize) -> Result<Message, MessageError> {
         let header = Header::from_bytes(decoder).map_err(|_| MessageError::InvalidHeader)?;
         let question = Question::from_bytes(decoder).map_err(|_| MessageError::InvalidQuestion)?;
 
@@ -74,15 +77,15 @@ impl Message {
             answers.push(answer);
         }
 
-        let mut authorities: Vec<Record> = Vec::with_capacity(header.answer_count() as usize);
-        for _ in 0..header.answer_count() {
-            let answer = Record::from_bytes(decoder).map_err(|_| MessageError::InvalidAnswer)?;
+        let mut authorities: Vec<Record> = Vec::with_capacity(header.authority_count() as usize);
+        for _ in 0..header.authority_count() {
+            let answer = Record::from_bytes(decoder).map_err(|_| MessageError::InvalidAuthority)?;
             authorities.push(answer);
         }
 
-        let mut additional: Vec<Record> = Vec::with_capacity(header.answer_count() as usize);
-        for _ in 0..header.answer_count() {
-            let answer = Record::from_bytes(decoder).map_err(|_| MessageError::InvalidAnswer)?;
+        let mut additional: Vec<Record> = Vec::with_capacity(header.additional_count() as usize);
+        for _ in 0..header.additional_count() {
+            let answer = Record::from_bytes(decoder).map_err(|_| MessageError::InvalidAdditional)?;
             additional.push(answer);
         }
 
@@ -95,6 +98,23 @@ impl Message {
             .build();
 
         Ok(message)
+    }
+
+    pub fn to_bytes(self, encoder: &mut Serialize) {
+        self.header.into_bytes(encoder);
+        self.question.into_bytes(encoder);
+
+        for record in self.answer_records {
+            record.into_bytes(encoder);
+        }
+
+        for record in self.authority_records {
+            record.into_bytes(encoder);
+        }
+
+        for record in self.additional_records {
+            record.into_bytes(encoder);
+        }
     }
 }
 
@@ -171,5 +191,70 @@ where
             authority_records: self.authority_records,
             additional_records: additional,
         }
+    }
+}
+
+#[cfg(test)]
+mod message_unittest {
+    use crate::packet::seder::deserializer::Deserialize;
+    use crate::packet::seder::serializer::Serialize;
+    use crate::packet::message::{Message, MessageBuilder};
+    use crate::packet::record::record_unittest::get_sample_a_record;
+    use crate::packet::headers::header::header_unittest::get_response_header;
+    use crate::packet::question::question_unittest::get_google_a_question;
+
+    #[test]
+    fn google_a_ques_answer() {
+        let wire_data: [u8; 48] = [
+            0xf2, 0xe8, 0x81, 0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x03, 0x77,
+            0x77, 0x77, 0x06, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00,
+            0x00, 0x01, 0x00, 0x01, 0xc0, 0x0c, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x68,
+            0x00, 0x04, 0xac, 0xd9, 0x0e, 0xc4,
+        ];
+
+        let expected_header = get_response_header(62184);
+
+        let expected_question = get_google_a_question();
+
+        let answer_records = vec![get_sample_a_record()];
+
+        let expected_message = MessageBuilder::new()
+            .header(expected_header)
+            .question(expected_question)
+            .answer(answer_records)
+            .build();
+
+        let mut decoder = Deserialize::new(&wire_data);
+
+        let actual_message = Message::from_bytes(&mut decoder).unwrap();
+
+        assert_eq!(actual_message, expected_message);
+    }
+
+    #[test]
+    fn serialize_google_response_message() {
+        let expected_wire_data: [u8; 48] = [
+            0xf2, 0xe8, 0x81, 0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x03, 0x77,
+            0x77, 0x77, 0x06, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00,
+            0x00, 0x01, 0x00, 0x01, 0xc0, 0x0c, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x68,
+            0x00, 0x04, 0xac, 0xd9, 0x0e, 0xc4,
+        ];
+
+        let expected_header = get_response_header(62184);
+
+        let expected_question = get_google_a_question();
+
+        let answer_records = vec![get_sample_a_record()];
+
+        let expected_message = MessageBuilder::new()
+            .header(expected_header)
+            .question(expected_question)
+            .answer(answer_records)
+            .build();
+
+        let mut encoder = Serialize::new();
+        expected_message.to_bytes(&mut encoder);
+
+        assert_eq!(encoder.bin_data(), expected_wire_data);
     }
 }

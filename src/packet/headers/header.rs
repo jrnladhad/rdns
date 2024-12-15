@@ -5,14 +5,15 @@ use std::cmp::PartialEq;
 use thiserror::Error;
 
 // custom crates
-use crate::packet::bin_reader::BinReader;
 use crate::packet::headers::header_flags::HeaderFlags;
+use crate::packet::seder::deserializer::Deserialize;
+use crate::packet::seder::serializer::Serialize;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum HeaderError {
     #[error("Could not get {0} bytes from wire")]
     InsufficientData(usize),
-    #[error("Flag errors")]
+    #[error("Unable to build flags, wrong combination of flags received")]
     FlagError,
     #[error("No XID provided for the message")]
     MissingId,
@@ -52,7 +53,7 @@ pub struct Header {
 }
 
 #[derive(Clone)]
-pub struct HeaderBuilder<I, F>
+pub(self) struct HeaderBuilder<I, F>
 where
     I: IdState,
     F: FlagState,
@@ -79,10 +80,10 @@ impl Default for HeaderBuilder<IdUnset, FlagsUnset> {
 }
 
 impl Header {
-    pub fn from_bytes(decoder: &mut BinReader) -> HeaderResult<Header> {
+    pub fn from_bytes(decoder: &mut Deserialize) -> HeaderResult<Header> {
         let id = decoder
             .read_u16()
-            .map_err(|_| HeaderError::InsufficientData(2))?;
+            .map_err(|_| HeaderError::MissingId)?;
 
         let flags = decoder
             .read_u16()
@@ -95,7 +96,6 @@ impl Header {
             .map_err(|_| HeaderError::InsufficientData(2))?;
 
         match question_count {
-            0 => return Err(HeaderError::IncorrectQuestionCount(0)),
             1 => question_count,
             _ => return Err(HeaderError::IncorrectQuestionCount(question_count)),
         };
@@ -124,17 +124,26 @@ impl Header {
         Ok(header)
     }
 
-    pub fn id(&self) -> u16 {
-        self.id
+    pub fn into_bytes(self, encoder: &mut Serialize) {
+        encoder.write_u16(self.id);
+        self.flags.into_bytes(encoder);
+        encoder.write_u16(self.question_count);
+        encoder.write_u16(self.answer_count);
+        encoder.write_u16(self.authoritative_count);
+        encoder.write_u16(self.additional_count);
     }
 
-    pub fn flags(&self) -> &HeaderFlags {
-        &self.flags
-    }
-
-    pub fn question_count(&self) -> u16 {
-        self.question_count
-    }
+    // pub fn id(&self) -> u16 {
+    //     self.id
+    // }
+    //
+    // pub fn flags(&self) -> &HeaderFlags {
+    //     &self.flags
+    // }
+    //
+    // pub fn question_count(&self) -> u16 {
+    //     self.question_count
+    // }
 
     pub fn answer_count(&self) -> u16 {
         self.answer_count
@@ -213,10 +222,32 @@ impl HeaderBuilder<IdSet, FlagsSet> {
 }
 
 #[cfg(test)]
-mod test {
-    use crate::packet::bin_reader::BinReader;
+pub mod header_unittest {
     use crate::packet::headers::header::{Header, HeaderBuilder, HeaderError};
-    use crate::packet::headers::header_flags::{HeaderFlagsBuilder, Opcode, Rcode, QR};
+    use crate::packet::headers::header_flags::{header_flags_unittest::{generate_query_header_flags, generate_response_header_flag}, Rcode};
+    use crate::packet::seder::deserializer::Deserialize;
+    use crate::packet::seder::serializer::Serialize;
+
+    pub fn get_response_header(id: u16) -> Header {
+        let expected_header_flags = generate_response_header_flag(
+            false,
+            false,
+            true,
+            true,
+            Rcode::NoError
+        );
+
+        let expected_header = HeaderBuilder::new()
+            .id(id)
+            .flags(expected_header_flags)
+            .question_count(1)
+            .answer_count(1)
+            .authoritative_count(0)
+            .additional_count(0)
+            .build();
+
+        expected_header
+    }
 
     #[test]
     fn read_query_header_success() {
@@ -224,15 +255,7 @@ mod test {
             0xf2, 0xe8, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let expected_header_flags = HeaderFlagsBuilder::new()
-            .query_or_response(QR::Query)
-            .opcode(Opcode::Query)
-            .authoritative_answer(false)
-            .truncation(false)
-            .recursion_desired(true)
-            .recursion_available(false)
-            .response_code(Rcode::NoError)
-            .build();
+        let expected_header_flags = generate_query_header_flags(true);
 
         let expected_header = HeaderBuilder::new()
             .id(62184)
@@ -243,7 +266,7 @@ mod test {
             .additional_count(0)
             .build();
 
-        let mut decoder = BinReader::new(&packet_bytes);
+        let mut decoder = Deserialize::new(&packet_bytes);
         let header = Header::from_bytes(&mut decoder).unwrap();
 
         assert_eq!(header, expected_header);
@@ -255,15 +278,7 @@ mod test {
             0xf2, 0xe8, 0x81, 0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let expected_header_flags = HeaderFlagsBuilder::new()
-            .query_or_response(QR::Response)
-            .opcode(Opcode::Query)
-            .authoritative_answer(false)
-            .truncation(false)
-            .recursion_desired(true)
-            .recursion_available(true)
-            .response_code(Rcode::NoError)
-            .build();
+        let expected_header_flags = generate_response_header_flag(false, false, true, true, Rcode::NoError);
 
         let expected_header = HeaderBuilder::new()
             .id(62184)
@@ -274,7 +289,7 @@ mod test {
             .additional_count(0)
             .build();
 
-        let mut decoder = BinReader::new(&packet_bytes);
+        let mut decoder = Deserialize::new(&packet_bytes);
         let header = Header::from_bytes(&mut decoder).unwrap();
 
         assert_eq!(header, expected_header);
@@ -284,7 +299,7 @@ mod test {
     fn read_header_insufficient_data() {
         let packet_bytes: [u8; 2] = [0xf2, 0xe8];
 
-        let mut decoder = BinReader::new(&packet_bytes);
+        let mut decoder = Deserialize::new(&packet_bytes);
 
         assert!(Header::from_bytes(&mut decoder).is_err_and(|e| {
             match e {
@@ -292,5 +307,28 @@ mod test {
                 _ => false,
             }
         }));
+    }
+
+    #[test]
+    fn serialize_query_header() {
+        let expected_packet_bytes: [u8; 12] = [
+            0xf2, 0xe8, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        let header_flags = generate_query_header_flags(true);
+
+        let header = HeaderBuilder::new()
+            .id(62184)
+            .flags(header_flags)
+            .question_count(1)
+            .answer_count(0)
+            .authoritative_count(0)
+            .additional_count(0)
+            .build();
+
+        let mut encoder = Serialize::new();
+        let _ = header.into_bytes(&mut encoder);
+
+        assert_eq!(encoder.bin_data(), expected_packet_bytes)
     }
 }

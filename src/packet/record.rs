@@ -1,6 +1,8 @@
-use crate::packet::{bin_reader::BinReader, fqdn::Fqdn};
+use crate::packet::seder::serializer::Serialize;
+use crate::packet::fqdn::Fqdn;
 use crate::records::{record_class::RecordClass, record_data::RecordData, record_type::RecordType};
 use thiserror::Error;
+use crate::packet::seder::deserializer::Deserialize;
 
 #[derive(Error, Debug)]
 pub enum RecordError {
@@ -81,7 +83,7 @@ impl Default for RecordBuilderUnset {
 }
 
 impl Record {
-    pub fn from_bytes(decoder: &mut BinReader) -> RecordResult {
+    pub fn from_bytes(decoder: &mut Deserialize) -> RecordResult {
         let owner_name = Fqdn::from_bytes(decoder).map_err(|_| RecordError::InvalidName)?;
 
         let record_type = decoder.read_u16().map_err(|_| RecordError::InvalidType)?;
@@ -98,8 +100,8 @@ impl Record {
 
         // some checks on data length based on record type.
 
-        let data = RecordData::generate_record_data(decoder, &record_type)
-            .map_err(|_| RecordError::InvalidData)?;
+        let data =
+            RecordData::from_bytes(decoder, &record_type).map_err(|_| RecordError::InvalidData)?;
 
         let record = RecordBuilder::new()
             .owner_name(owner_name)
@@ -110,6 +112,16 @@ impl Record {
             .build();
 
         Ok(record)
+    }
+
+    pub fn into_bytes(self, encoder: &mut Serialize) {
+        self.owner_name.into_bytes(encoder);
+
+        encoder.write_u16(self.record_type.into());
+        encoder.write_u16(self.class.into());
+        encoder.write_u32(self.ttl);
+
+        self.data.to_bytes(encoder);
     }
 }
 
@@ -193,8 +205,9 @@ where
 }
 
 #[cfg(test)]
-mod test {
-    use crate::packet::bin_reader::BinReader;
+pub mod record_unittest {
+    use crate::packet::seder::deserializer::Deserialize;
+    use crate::packet::seder::serializer::Serialize;
     use crate::packet::fqdn::FqdnBuilder;
     use crate::packet::record::{Record, RecordBuilder};
     use crate::records::rdata::a::A;
@@ -205,7 +218,7 @@ mod test {
     use std::net::{Ipv4Addr, Ipv6Addr};
     use std::str::FromStr;
 
-    fn get_sample_a_record() -> Record {
+    pub fn get_sample_a_record() -> Record {
         let expected_name = FqdnBuilder::new()
             .generate_from_string(String::from("www.google.com"))
             .build();
@@ -213,7 +226,7 @@ mod test {
         let data = A::new(Ipv4Addr::from_str("172.217.14.196").unwrap());
         let record_data = RecordData::A(data);
 
-        let expected_record = RecordBuilder::new()
+        let a_record = RecordBuilder::new()
             .owner_name(expected_name)
             .record_type(RecordType::A)
             .class(RecordClass::IN)
@@ -221,7 +234,7 @@ mod test {
             .data(record_data)
             .build();
 
-        expected_record
+        a_record
     }
 
     fn get_sample_aaaa_record() -> Record {
@@ -232,7 +245,7 @@ mod test {
         let data = AAAA::new(Ipv6Addr::from_str("2607:f8b0:400a:80a::2004").unwrap());
         let record_data = RecordData::AAAA(data);
 
-        let expected_record = RecordBuilder::new()
+        let aaaa_record = RecordBuilder::new()
             .owner_name(expected_name)
             .record_type(RecordType::AAAA)
             .class(RecordClass::IN)
@@ -240,7 +253,7 @@ mod test {
             .data(record_data)
             .build();
 
-        expected_record
+        aaaa_record
     }
 
     #[test]
@@ -253,7 +266,7 @@ mod test {
 
         let expected_record = get_sample_a_record();
 
-        let decoder = BinReader::new(&packet_bytes);
+        let decoder = Deserialize::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(20);
 
         let actual_record = Record::from_bytes(&mut decoder).unwrap();
@@ -272,7 +285,7 @@ mod test {
 
         let expected_record = get_sample_aaaa_record();
 
-        let decoder = BinReader::new(&packet_bytes);
+        let decoder = Deserialize::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(20);
 
         let actual_record = Record::from_bytes(&mut decoder).unwrap();
@@ -293,7 +306,7 @@ mod test {
         let expected_records: Vec<Record> = vec![get_sample_a_record(), get_sample_aaaa_record()];
         let mut actual_records: Vec<Record> = Vec::with_capacity(2);
 
-        let decoder = BinReader::new(&packet_bytes);
+        let decoder = Deserialize::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(20);
 
         for _ in 0..2 {
@@ -302,5 +315,35 @@ mod test {
         }
 
         assert_eq!(actual_records, expected_records);
+    }
+
+    #[test]
+    fn serialize_a_record() {
+        let expected_serialization: [u8; 30] = [
+            0x03, 0x77, 0x77, 0x77, 0x06, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x03, 0x63, 0x6f,
+            0x6d, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x68, 0x00, 0x04, 0xac, 0xd9,
+            0x0e, 0xc4,
+        ];
+
+        let record = get_sample_a_record();
+        let mut encoder = Serialize::new();
+        record.into_bytes(&mut encoder);
+
+        assert_eq!(encoder.bin_data(), expected_serialization);
+    }
+
+    #[test]
+    fn serialize_aaaa_record() {
+        let expected_serialization: [u8; 42] = [
+            0x03, 0x77, 0x77, 0x77, 0x06, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x03, 0x63, 0x6f,
+            0x6d, 0x00, 0x00, 0x1c, 0x00, 0x01, 0x00, 0x00, 0x00, 0xc9, 0x00, 0x10, 0x26, 0x07,
+            0xf8, 0xb0, 0x40, 0x0a, 0x08, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x04,
+        ];
+
+        let record = get_sample_aaaa_record();
+        let mut encoder = Serialize::new();
+        record.into_bytes(&mut encoder);
+
+        assert_eq!(encoder.bin_data(), expected_serialization);
     }
 }

@@ -29,3 +29,13 @@ impl From<u16> for RecordType {
         }
     }
 }
+
+impl Into<u16> for RecordType {
+    fn into(self) -> u16 {
+        match self {
+            RecordType::A => 1,
+            RecordType::AAAA => 28,
+            RecordType::UNKNOWN => 256
+        }
+    }
+}
