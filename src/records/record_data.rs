@@ -1,5 +1,6 @@
 use crate::packet::seder::deserializer::Deserialize;
 use crate::packet::seder::serializer::Serialize;
+use crate::packet::seder::{FromBytes, ToBytes};
 use crate::records::rdata::a::A;
 use crate::records::rdata::aaaa::AAAA;
 use crate::records::record_type::RecordType;

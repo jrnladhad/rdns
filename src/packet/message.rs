@@ -2,8 +2,9 @@ use super::question::Question;
 use super::record::Record;
 use crate::packet::headers::header::Header;
 use thiserror::Error;
-use crate::packet::seder::serializer::Serialize;
-use crate::packet::seder::deserializer::Deserialize;
+use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, FromBytes, ToBytes};
+
+type MessageResult = Result<Message, MessageError>;
 
 #[derive(Debug, Error)]
 pub enum MessageError {
@@ -66,9 +67,11 @@ impl Default for MessageBuilder<HeaderUnset, QuestionUnset> {
     }
 }
 
-impl Message {
-    pub fn from_bytes(decoder: &mut Deserialize) -> Result<Message, MessageError> {
-        let header = Header::from_bytes(decoder).map_err(|_| MessageError::InvalidHeader)?;
+impl FromBytes for Message {
+    type Error = MessageError;
+
+    fn from_bytes(decoder: &mut Deserialize) -> MessageResult {
+        let header =  Header::from_bytes(decoder).map_err(|_| MessageError::InvalidHeader)?;
         let question = Question::from_bytes(decoder).map_err(|_| MessageError::InvalidQuestion)?;
 
         let mut answers: Vec<Record> = Vec::with_capacity(header.answer_count() as usize);
@@ -99,21 +102,23 @@ impl Message {
 
         Ok(message)
     }
+}
 
-    pub fn to_bytes(self, encoder: &mut Serialize) {
-        self.header.into_bytes(encoder);
-        self.question.into_bytes(encoder);
+impl ToBytes for Message {
+    fn to_bytes(&self, encoder: &mut Serialize) {
+        self.header.to_bytes(encoder);
+        self.question.to_bytes(encoder);
 
-        for record in self.answer_records {
-            record.into_bytes(encoder);
+        for record in &self.answer_records {
+            record.to_bytes(encoder);
         }
 
-        for record in self.authority_records {
-            record.into_bytes(encoder);
+        for record in &self.authority_records {
+            record.to_bytes(encoder);
         }
 
-        for record in self.additional_records {
-            record.into_bytes(encoder);
+        for record in &self.additional_records {
+            record.to_bytes(encoder);
         }
     }
 }
@@ -196,8 +201,7 @@ where
 
 #[cfg(test)]
 mod message_unittest {
-    use crate::packet::seder::deserializer::Deserialize;
-    use crate::packet::seder::serializer::Serialize;
+    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, FromBytes, ToBytes};
     use crate::packet::message::{Message, MessageBuilder};
     use crate::packet::record::record_unittest::get_sample_a_record;
     use crate::packet::headers::header::header_unittest::get_response_header;

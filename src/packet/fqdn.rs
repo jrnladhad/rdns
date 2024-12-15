@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use thiserror::Error;
 use crate::packet::seder::deserializer::Deserialize;
+use crate::packet::seder::{FromBytes, ToBytes};
 use crate::packet::seder::serializer::Serialize;
 
 const PTR_MASK: u8 = 11 << 6;
@@ -69,20 +70,18 @@ where
     state: PhantomData<S>,
 }
 
-impl Fqdn {
-    pub fn from_bytes(decoder: &mut Deserialize) -> FqdnResult<Fqdn> {
+impl FromBytes for Fqdn {
+    type Error = FqdnError;
+
+    fn from_bytes(decoder: &mut Deserialize) -> FqdnResult<Fqdn> {
         let fqdn = FqdnBuilder::new().generate_from_bytes(decoder)?.build();
 
         Ok(fqdn)
     }
+}
 
-    pub fn to_owned_str(&self) -> String {
-        self.convert_to_string(0)
-    }
-
-    // TODO: naming convention says that this should be into_bytes
-    // article: https://github.com/rust-lang/rust-wiki-backup/blob/master/Doc-detailed-release-notes.md#cast-naming-conventions
-    pub fn into_bytes(self, encoder: &mut Serialize) {
+impl ToBytes for Fqdn {
+    fn to_bytes(&self, encoder: &mut Serialize) {
         let mut name_compressed = false;
 
         for i in 0..self.labels.len() {
@@ -103,6 +102,12 @@ impl Fqdn {
         if name_compressed == false {
             encoder.write_u8(0);
         }
+    }
+}
+
+impl Fqdn {
+    pub fn to_owned_str(&self) -> String {
+        self.convert_to_string(0)
     }
 
     fn convert_to_string(&self, i: usize) -> String{
@@ -260,7 +265,7 @@ impl FqdnBuilder<FqdnSet> {
 
 #[cfg(test)]
 mod fqdn_unittest {
-    use crate::packet::seder::deserializer::Deserialize;
+    use crate::packet::seder::{deserializer::Deserialize, FromBytes};
     use crate::packet::fqdn::Fqdn;
 
     #[test]

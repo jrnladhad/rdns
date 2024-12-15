@@ -1,5 +1,6 @@
 use crate::packet::seder::serializer::Serialize;
 use thiserror::Error;
+use crate::packet::seder::ToBytes;
 
 #[derive(Error, Debug)]
 pub enum HeaderFlagError {
@@ -33,6 +34,39 @@ type HeaderFlagsBuilderRaSet =
     HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdSet, RaSet, RcodeUnset>;
 type HeaderFlagsBuilderSet =
     HeaderFlagsBuilder<QrSet, OpcodeSet, AaSet, TcSet, RdSet, RaSet, RcodeSet>;
+
+// For serialization
+const SET_QUESTION: u16 = 0 << 15;
+const SET_RESPONSE: u16 = 1 << 15;
+
+const SET_QUERY: u16 = 0 << 11;
+const SET_IQUERY: u16 = 1 << 11;
+const SET_STATUS: u16 = 2 << 11;
+
+const SET_AA: u16 = 1 << 10;
+
+const SET_TC: u16 = 1 << 9;
+
+const SET_RD: u16 = 1 << 8;
+
+const SET_RA: u16 = 1 << 7;
+
+const SET_NO_ERROR: u16 = 0;
+const SET_FORMAT_ERROR: u16 = 1;
+const SET_SERVER_FAILURE: u16 = 2;
+const SET_NAME_ERROR: u16 = 3;
+const SET_NOT_IMPLEMENTED: u16 = 4;
+const SET_REFUSED: u16 = 5;
+
+// For deserialization
+const QR_MASK: u16 = 1 << 15;
+const OPCODE_MASK: u16 = 1 << 11;
+const AA_MASK: u16 = 1 << 10;
+const TC_MASK: u16 = 1 << 9;
+const RD_MASK: u16 = 1 << 8;
+const RA_MASK: u16 = 1 << 7;
+const ZERO_MASK: u16 = 7 << 4;
+const RC_MASK: u16 = 15;
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum QR {
@@ -360,15 +394,6 @@ impl HeaderFlagsBuilderSet {
 impl TryFrom<u16> for HeaderFlags {
     type Error = HeaderFlagError;
     fn try_from(value: u16) -> Result<Self, Self::Error> {
-        const QR_MASK: u16 = 1 << 15;
-        const OPCODE_MASK: u16 = 1 << 11;
-        const AA_MASK: u16 = 1 << 10;
-        const TC_MASK: u16 = 1 << 9;
-        const RD_MASK: u16 = 1 << 8;
-        const RA_MASK: u16 = 1 << 7;
-        const ZERO_MASK: u16 = 7 << 4;
-        const RC_MASK: u16 = 15;
-
         let query_or_response = QR::from((value & QR_MASK) != 0);
 
         let opcode = Opcode::try_from((value & OPCODE_MASK) >> 11)?;
@@ -412,75 +437,55 @@ impl TryFrom<u16> for HeaderFlags {
     }
 }
 
-impl HeaderFlags {
-    const SET_QUESTION: u16 = 0 << 15;
-    const SET_RESPONSE: u16 = 1 << 15;
-
-    const SET_QUERY: u16 = 0 << 11;
-    const SET_IQUERY: u16 = 1 << 11;
-    const SET_STATUS: u16 = 2 << 11;
-
-    const SET_AA: u16 = 1 << 10;
-
-    const SET_TC: u16 = 1 << 9;
-
-    const SET_RD: u16 = 1 << 8;
-
-    const SET_RA: u16 = 1 << 7;
-
-    const SET_NO_ERROR: u16 = 0;
-    const SET_FORMAT_ERROR: u16 = 1;
-    const SET_SERVER_FAILURE: u16 = 2;
-    const SET_NAME_ERROR: u16 = 3;
-    const SET_NOT_IMPLEMENTED: u16 = 4;
-    const SET_REFUSED: u16 = 5;
-
-    pub fn into_bytes(self, encoder: &mut Serialize) {
+impl ToBytes for HeaderFlags {
+    fn to_bytes(&self, encoder: &mut Serialize) {
         let mut flags: u16 = 0;
 
         flags = match self.query_or_response {
-            QR::Query => flags | HeaderFlags::SET_QUESTION,
-            QR::Response => flags | HeaderFlags::SET_RESPONSE,
+            QR::Query => flags | SET_QUESTION,
+            QR::Response => flags | SET_RESPONSE,
         };
 
         flags = match self.opcode {
-            Opcode::Query => flags | HeaderFlags::SET_QUERY,
-            Opcode::Iquery => flags | HeaderFlags::SET_IQUERY,
-            Opcode::Status => flags | HeaderFlags::SET_STATUS,
+            Opcode::Query => flags | SET_QUERY,
+            Opcode::Iquery => flags | SET_IQUERY,
+            Opcode::Status => flags | SET_STATUS,
         };
 
         flags = match self.authoritative_answer {
-            true => flags | HeaderFlags::SET_AA,
+            true => flags | SET_AA,
             false => flags,
         };
 
         flags = match self.truncation {
-            true => flags | HeaderFlags::SET_TC,
+            true => flags | SET_TC,
             false => flags,
         };
 
         flags = match self.recursion_desired {
-            true => flags | HeaderFlags::SET_RD,
+            true => flags | SET_RD,
             false => flags,
         };
 
         flags = match self.recursion_available {
-            true => flags | HeaderFlags::SET_RA,
+            true => flags | SET_RA,
             false => flags,
         };
 
         flags = match self.response_code {
-            Rcode::NoError => flags | HeaderFlags::SET_NO_ERROR,
-            Rcode::FormatError => flags | HeaderFlags::SET_FORMAT_ERROR,
-            Rcode::ServerFailure => flags | HeaderFlags::SET_SERVER_FAILURE,
-            Rcode::NameError => flags | HeaderFlags::SET_NAME_ERROR,
-            Rcode::NotImplemented => flags | HeaderFlags::SET_NOT_IMPLEMENTED,
-            Rcode::Refused => flags | HeaderFlags::SET_REFUSED,
+            Rcode::NoError => flags | SET_NO_ERROR,
+            Rcode::FormatError => flags | SET_FORMAT_ERROR,
+            Rcode::ServerFailure => flags | SET_SERVER_FAILURE,
+            Rcode::NameError => flags | SET_NAME_ERROR,
+            Rcode::NotImplemented => flags | SET_NOT_IMPLEMENTED,
+            Rcode::Refused => flags | SET_REFUSED,
         };
 
         encoder.write_u16(flags);
     }
+}
 
+impl HeaderFlags {
     pub fn truncation(&mut self, tc: bool) {
         self.truncation = tc
     }
@@ -491,7 +496,7 @@ pub mod header_flags_unittest {
     use crate::packet::headers::header_flags::{
         HeaderFlags, HeaderFlagsBuilder, Opcode, Rcode, QR,
     };
-    use crate::packet::seder::serializer::Serialize;
+    use crate::packet::seder::{serializer::Serialize, ToBytes};
 
     pub fn generate_query_header_flags(rd: bool) -> HeaderFlags {
         let header_flags = HeaderFlagsBuilder::new()
@@ -529,7 +534,7 @@ pub mod header_flags_unittest {
         let header_flags = generate_response_header_flag(false, false, true, true, Rcode::NoError);
 
         let mut encoder = Serialize::new();
-        header_flags.into_bytes(&mut encoder);
+        header_flags.to_bytes(&mut encoder);
 
         assert_eq!(encoder.bin_data(), expected_bin_data);
     }

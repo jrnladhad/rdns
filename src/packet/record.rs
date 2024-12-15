@@ -3,6 +3,7 @@ use crate::packet::fqdn::Fqdn;
 use crate::records::{record_class::RecordClass, record_data::RecordData, record_type::RecordType};
 use thiserror::Error;
 use crate::packet::seder::deserializer::Deserialize;
+use crate::packet::seder::{FromBytes, ToBytes};
 
 #[derive(Error, Debug)]
 pub enum RecordError {
@@ -82,8 +83,10 @@ impl Default for RecordBuilderUnset {
     }
 }
 
-impl Record {
-    pub fn from_bytes(decoder: &mut Deserialize) -> RecordResult {
+impl FromBytes for Record {
+    type Error = RecordError;
+
+    fn from_bytes(decoder: &mut Deserialize) -> RecordResult {
         let owner_name = Fqdn::from_bytes(decoder).map_err(|_| RecordError::InvalidName)?;
 
         let record_type = decoder.read_u16().map_err(|_| RecordError::InvalidType)?;
@@ -113,10 +116,11 @@ impl Record {
 
         Ok(record)
     }
+}
 
-    pub fn into_bytes(self, encoder: &mut Serialize) {
-        self.owner_name.into_bytes(encoder);
-
+impl ToBytes for Record {
+    fn to_bytes(&self, encoder: &mut Serialize) {
+        self.owner_name.to_bytes(encoder);
         encoder.write_u16(self.record_type.into());
         encoder.write_u16(self.class.into());
         encoder.write_u32(self.ttl);
@@ -206,8 +210,7 @@ where
 
 #[cfg(test)]
 pub mod record_unittest {
-    use crate::packet::seder::deserializer::Deserialize;
-    use crate::packet::seder::serializer::Serialize;
+    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, FromBytes, ToBytes};
     use crate::packet::fqdn::FqdnBuilder;
     use crate::packet::record::{Record, RecordBuilder};
     use crate::records::rdata::a::A;
@@ -327,7 +330,7 @@ pub mod record_unittest {
 
         let record = get_sample_a_record();
         let mut encoder = Serialize::new();
-        record.into_bytes(&mut encoder);
+        record.to_bytes(&mut encoder);
 
         assert_eq!(encoder.bin_data(), expected_serialization);
     }
@@ -342,7 +345,7 @@ pub mod record_unittest {
 
         let record = get_sample_aaaa_record();
         let mut encoder = Serialize::new();
-        record.into_bytes(&mut encoder);
+        record.to_bytes(&mut encoder);
 
         assert_eq!(encoder.bin_data(), expected_serialization);
     }

@@ -1,13 +1,7 @@
-// standard crates
 use std::cmp::PartialEq;
-
-// external crates
 use thiserror::Error;
-
-// custom crates
 use crate::packet::headers::header_flags::HeaderFlags;
-use crate::packet::seder::deserializer::Deserialize;
-use crate::packet::seder::serializer::Serialize;
+use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, FromBytes, ToBytes};
 
 #[derive(Error, Debug, PartialEq)]
 pub enum HeaderError {
@@ -79,11 +73,11 @@ impl Default for HeaderBuilder<IdUnset, FlagsUnset> {
     }
 }
 
-impl Header {
-    pub fn from_bytes(decoder: &mut Deserialize) -> HeaderResult<Header> {
-        let id = decoder
-            .read_u16()
-            .map_err(|_| HeaderError::MissingId)?;
+impl FromBytes for Header {
+    type Error = HeaderError;
+
+    fn from_bytes(decoder: &mut Deserialize) -> HeaderResult<Header> {
+        let id = decoder.read_u16().map_err(|_| HeaderError::MissingId)?;
 
         let flags = decoder
             .read_u16()
@@ -123,16 +117,20 @@ impl Header {
 
         Ok(header)
     }
+}
 
-    pub fn into_bytes(self, encoder: &mut Serialize) {
+impl ToBytes for Header {
+    fn to_bytes(&self, encoder: &mut Serialize) {
         encoder.write_u16(self.id);
-        self.flags.into_bytes(encoder);
+        self.flags.to_bytes(encoder);
         encoder.write_u16(self.question_count);
         encoder.write_u16(self.answer_count);
         encoder.write_u16(self.authoritative_count);
         encoder.write_u16(self.additional_count);
     }
+}
 
+impl Header {
     // pub fn id(&self) -> u16 {
     //     self.id
     // }
@@ -224,18 +222,15 @@ impl HeaderBuilder<IdSet, FlagsSet> {
 #[cfg(test)]
 pub mod header_unittest {
     use crate::packet::headers::header::{Header, HeaderBuilder, HeaderError};
-    use crate::packet::headers::header_flags::{header_flags_unittest::{generate_query_header_flags, generate_response_header_flag}, Rcode};
-    use crate::packet::seder::deserializer::Deserialize;
-    use crate::packet::seder::serializer::Serialize;
+    use crate::packet::headers::header_flags::{
+        header_flags_unittest::{generate_query_header_flags, generate_response_header_flag},
+        Rcode,
+    };
+    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, FromBytes, ToBytes};
 
     pub fn get_response_header(id: u16) -> Header {
-        let expected_header_flags = generate_response_header_flag(
-            false,
-            false,
-            true,
-            true,
-            Rcode::NoError
-        );
+        let expected_header_flags =
+            generate_response_header_flag(false, false, true, true, Rcode::NoError);
 
         let expected_header = HeaderBuilder::new()
             .id(id)
@@ -278,7 +273,8 @@ pub mod header_unittest {
             0xf2, 0xe8, 0x81, 0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
         ];
 
-        let expected_header_flags = generate_response_header_flag(false, false, true, true, Rcode::NoError);
+        let expected_header_flags =
+            generate_response_header_flag(false, false, true, true, Rcode::NoError);
 
         let expected_header = HeaderBuilder::new()
             .id(62184)
@@ -327,7 +323,7 @@ pub mod header_unittest {
             .build();
 
         let mut encoder = Serialize::new();
-        let _ = header.into_bytes(&mut encoder);
+        header.to_bytes(&mut encoder);
 
         assert_eq!(encoder.bin_data(), expected_packet_bytes)
     }
