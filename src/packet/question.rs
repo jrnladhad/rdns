@@ -158,13 +158,11 @@ pub mod question_unittest {
             .generate_from_string(String::from("www.google.com"))
             .build();
 
-        let expected_question = QuestionBuilder::new()
+        QuestionBuilder::new()
             .question_name(expected_qname)
             .question_class(IN)
             .question_type(A)
-            .build();
-
-        expected_question
+            .build()
     }
 
     #[test]

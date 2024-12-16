@@ -69,16 +69,13 @@ const ZERO_MASK: u16 = 7 << 4;
 const RC_MASK: u16 = 15;
 
 #[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(Default)]
 pub enum QR {
+    #[default]
     Query,
     Response,
 }
 
-impl Default for QR {
-    fn default() -> Self {
-        QR::Query
-    }
-}
 
 impl From<bool> for QR {
     fn from(value: bool) -> Self {
@@ -90,17 +87,14 @@ impl From<bool> for QR {
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(Default)]
 pub enum Opcode {
+    #[default]
     Query,
     Iquery,
     Status,
 }
 
-impl Default for Opcode {
-    fn default() -> Self {
-        Opcode::Query
-    }
-}
 
 impl TryFrom<u16> for Opcode {
     type Error = HeaderFlagError;
@@ -115,7 +109,9 @@ impl TryFrom<u16> for Opcode {
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(Default)]
 pub enum Rcode {
+    #[default]
     NoError,
     FormatError,
     ServerFailure,
@@ -124,11 +120,6 @@ pub enum Rcode {
     Refused,
 }
 
-impl Default for Rcode {
-    fn default() -> Self {
-        Rcode::NoError
-    }
-}
 
 impl TryFrom<u16> for Rcode {
     type Error = HeaderFlagError;
@@ -220,7 +211,7 @@ impl RcodeState for RcodeUnset {}
 impl RcodeState for RcodeSet {}
 
 #[derive(Default, Clone)]
-pub(self) struct HeaderFlagsBuilder<Q, O, A, T, RD, RA, RC>
+struct HeaderFlagsBuilder<Q, O, A, T, RD, RA, RC>
 where
     Q: QrState,
     O: OpcodeState,
@@ -415,11 +406,11 @@ impl TryFrom<u16> for HeaderFlags {
             return Err(HeaderFlagError::QueryWithRABitSet);
         }
 
-        if query_or_response == QR::Query && authoritative_answer == true {
+        if query_or_response == QR::Query && authoritative_answer {
             return Err(HeaderFlagError::AuthoritativeAnswerBitSetOnQuery);
         }
 
-        if query_or_response == QR::Query && truncation == true {
+        if query_or_response == QR::Query && truncation {
             return Err(HeaderFlagError::TruncationBitSetOnQuery);
         }
 
@@ -499,12 +490,10 @@ pub mod header_flags_unittest {
     use crate::packet::seder::{serializer::Serialize, ToBytes};
 
     pub fn generate_query_header_flags(rd: bool) -> HeaderFlags {
-        let header_flags = HeaderFlagsBuilder::new()
+        HeaderFlagsBuilder::new()
             .query()
             .recursion_desired(rd)
-            .build();
-
-        header_flags
+            .build()
     }
 
     pub fn generate_response_header_flag(
@@ -514,7 +503,7 @@ pub mod header_flags_unittest {
         ra: bool,
         rcode: Rcode,
     ) -> HeaderFlags {
-        let header_flags = HeaderFlagsBuilder::new()
+        HeaderFlagsBuilder::new()
             .query_or_response(QR::Response)
             .opcode(Opcode::Query)
             .authoritative_answer(aa)
@@ -522,9 +511,7 @@ pub mod header_flags_unittest {
             .recursion_desired(rd)
             .recursion_available(ra)
             .response_code(rcode)
-            .build();
-
-        header_flags
+            .build()
     }
 
     #[test]

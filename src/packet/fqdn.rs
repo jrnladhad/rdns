@@ -99,7 +99,7 @@ impl ToBytes for Fqdn {
             };
         }
 
-        if name_compressed == false {
+        if !name_compressed {
             encoder.write_u8(0);
         }
     }
@@ -138,7 +138,7 @@ impl FqdnBuilder<FqdnUnset> {
         mut self,
         decoder: &mut Deserialize,
     ) -> FqdnResult<FqdnBuilder<FqdnSet>> {
-        let _ = self.generate_labels_recursively(decoder, 0)?;
+        self.generate_labels_recursively(decoder, 0)?;
 
         Ok(FqdnBuilder {
             labels: self.labels,
@@ -184,7 +184,7 @@ impl FqdnBuilder<FqdnUnset> {
                         return Err(FqdnError::ExceedingMaxLabelLength);
                     }
 
-                    self.fqdn_length = self.fqdn_length + label_len;
+                    self.fqdn_length += label_len;
                     if self.fqdn_length >= MAX_FQDN_LENGTH {
                         return Err(FqdnError::FqdnTooLong);
                     }
@@ -202,15 +202,14 @@ impl FqdnBuilder<FqdnUnset> {
 
                     let offset = label_ptr & OFFSET_MASK;
                     let mut cloned_decoder = decoder.cheap_clone(offset);
-                    let _ =
-                        self.generate_labels_recursively(&mut cloned_decoder, jump_count + 1)?;
+                    self.generate_labels_recursively(&mut cloned_decoder, jump_count + 1)?;
                     is_indirection = true;
 
                     FqdnParsingFSM::End
                 }
 
                 FqdnParsingFSM::End => {
-                    if is_indirection == false
+                    if !is_indirection
                     {
                         let _ = decoder.read_u8().map_err(|_| FqdnError::InsufficientData);
                     }

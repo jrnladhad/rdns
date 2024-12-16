@@ -30,9 +30,9 @@ impl From<u16> for RecordType {
     }
 }
 
-impl Into<u16> for RecordType {
-    fn into(self) -> u16 {
-        match self {
+impl From<RecordType> for u16 {
+    fn from(val: RecordType) -> Self {
+        match val {
             RecordType::A => 1,
             RecordType::AAAA => 28,
             RecordType::UNKNOWN => 256

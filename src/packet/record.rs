@@ -229,15 +229,13 @@ pub mod record_unittest {
         let data = A::new(Ipv4Addr::from_str("172.217.14.196").unwrap());
         let record_data = RecordData::A(data);
 
-        let a_record = RecordBuilder::new()
+        RecordBuilder::new()
             .owner_name(expected_name)
             .record_type(RecordType::A)
             .class(RecordClass::IN)
             .ttl(104)
             .data(record_data)
-            .build();
-
-        a_record
+            .build()
     }
 
     fn get_sample_aaaa_record() -> Record {
@@ -248,15 +246,13 @@ pub mod record_unittest {
         let data = AAAA::new(Ipv6Addr::from_str("2607:f8b0:400a:80a::2004").unwrap());
         let record_data = RecordData::AAAA(data);
 
-        let aaaa_record = RecordBuilder::new()
+        RecordBuilder::new()
             .owner_name(expected_name)
             .record_type(RecordType::AAAA)
             .class(RecordClass::IN)
             .ttl(201)
             .data(record_data)
-            .build();
-
-        aaaa_record
+            .build()
     }
 
     #[test]

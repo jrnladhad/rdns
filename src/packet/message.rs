@@ -43,7 +43,7 @@ pub struct Message {
     additional_records: Vec<Record>,
 }
 
-pub(self) struct MessageBuilder<H, Q>
+struct MessageBuilder<H, Q>
 where
     H: HeaderState,
     Q: QuestionState,

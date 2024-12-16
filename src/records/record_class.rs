@@ -19,9 +19,9 @@ impl From<u16> for RecordClass {
     }
 }
 
-impl Into<u16> for RecordClass {
-    fn into(self) -> u16 {
-        match self {
+impl From<RecordClass> for u16 {
+    fn from(val: RecordClass) -> Self {
+        match val {
             RecordClass::IN => 1,
             RecordClass::CH => 3,
             RecordClass::HS => 4,

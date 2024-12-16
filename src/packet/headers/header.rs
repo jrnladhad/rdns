@@ -47,7 +47,7 @@ pub struct Header {
 }
 
 #[derive(Clone)]
-pub(self) struct HeaderBuilder<I, F>
+struct HeaderBuilder<I, F>
 where
     I: IdState,
     F: FlagState,
@@ -232,16 +232,14 @@ pub mod header_unittest {
         let expected_header_flags =
             generate_response_header_flag(false, false, true, true, Rcode::NoError);
 
-        let expected_header = HeaderBuilder::new()
+        HeaderBuilder::new()
             .id(id)
             .flags(expected_header_flags)
             .question_count(1)
             .answer_count(1)
             .authoritative_count(0)
             .additional_count(0)
-            .build();
-
-        expected_header
+            .build()
     }
 
     #[test]

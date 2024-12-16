@@ -16,31 +16,31 @@ impl Serialize {
     }
 
     pub fn write_u8(&mut self, data: u8) {
-        self.cursor = self.cursor + 1;
+        self.cursor += 1;
         self.bin_data.push(data);
     }
 
     pub fn write_u16(&mut self, data: u16) {
         let mut data_as_bytes = data.to_be_bytes().to_vec();
-        self.cursor = self.cursor + 2;
+        self.cursor += 2;
         self.bin_data.append(&mut data_as_bytes);
     }
 
     pub fn write_u32(&mut self, data: u32) {
         let mut data_as_bytes = data.to_be_bytes().to_vec();
-        self.cursor = self.cursor + 4;
+        self.cursor += 4;
         self.bin_data.append(&mut data_as_bytes);
     }
 
     pub fn write_string(&mut self, data: &str) {
         self.write_u8(data.len() as u8);
         let mut str_bytes = data.as_bytes().to_vec();
-        self.cursor = self.cursor + (str_bytes.len() as u16);
+        self.cursor += str_bytes.len() as u16;
         self.bin_data.append(&mut str_bytes);
     }
 
     pub fn write_n_bytes(&mut self, mut byte_data: Vec<u8>) {
-        self.cursor = self.cursor + (byte_data.len() as u16);
+        self.cursor += byte_data.len() as u16;
         self.bin_data.append(&mut byte_data);
     }
 
