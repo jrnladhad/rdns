@@ -1,7 +1,9 @@
+use crate::packet::headers::header_flags::HeaderFlags;
+use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
 use std::cmp::PartialEq;
 use thiserror::Error;
-use crate::packet::headers::header_flags::HeaderFlags;
-use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, FromBytes, ToBytes};
+
+type HeaderResult = Result<Header, HeaderError>;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum HeaderError {
@@ -15,21 +17,19 @@ pub enum HeaderError {
     IncorrectQuestionCount(u16),
 }
 
-type HeaderResult<T> = Result<T, HeaderError>;
-
 // Different states for the Header builder
-#[derive(Default, Clone)]
+#[derive(Default)]
 struct IdUnset;
-#[derive(Default, Clone)]
+#[derive(Default)]
 struct IdSet(u16);
 
 trait IdState {}
 impl IdState for IdUnset {}
 impl IdState for IdSet {}
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 struct FlagsUnset;
-#[derive(Default, Clone)]
+#[derive(Default)]
 struct FlagsSet(HeaderFlags);
 
 trait FlagState {}
@@ -46,7 +46,6 @@ pub struct Header {
     additional_count: u16,
 }
 
-#[derive(Clone)]
 struct HeaderBuilder<I, F>
 where
     I: IdState,
@@ -58,6 +57,32 @@ where
     answer_count: u16,
     authoritative_count: u16,
     additional_count: u16,
+}
+
+impl Header {
+    // pub fn id(&self) -> u16 {
+    //     self.id
+    // }
+    //
+    // pub fn flags(&self) -> &HeaderFlags {
+    //     &self.flags
+    // }
+    //
+    // pub fn question_count(&self) -> u16 {
+    //     self.question_count
+    // }
+
+    pub fn answer_count(&self) -> u16 {
+        self.answer_count
+    }
+
+    pub fn authority_count(&self) -> u16 {
+        self.authoritative_count
+    }
+
+    pub fn additional_count(&self) -> u16 {
+        self.additional_count
+    }
 }
 
 impl Default for HeaderBuilder<IdUnset, FlagsUnset> {
@@ -73,17 +98,17 @@ impl Default for HeaderBuilder<IdUnset, FlagsUnset> {
     }
 }
 
-impl FromBytes for Header {
+impl TryFrom for Header {
     type Error = HeaderError;
 
-    fn from_bytes(decoder: &mut Deserialize) -> HeaderResult<Header> {
+    fn try_from_bytes(decoder: &mut Deserialize) -> HeaderResult {
         let id = decoder.read_u16().map_err(|_| HeaderError::MissingId)?;
 
         let flags = decoder
             .read_u16()
             .map_err(|_| HeaderError::InsufficientData(2))?;
 
-        let flags = HeaderFlags::try_from(flags).map_err(|_| HeaderError::FlagError)?;
+        let flags =  HeaderFlags::try_from(flags).map_err(|_| HeaderError::FlagError)?;
 
         let question_count = decoder
             .read_u16()
@@ -127,32 +152,6 @@ impl ToBytes for Header {
         encoder.write_u16(self.answer_count);
         encoder.write_u16(self.authoritative_count);
         encoder.write_u16(self.additional_count);
-    }
-}
-
-impl Header {
-    // pub fn id(&self) -> u16 {
-    //     self.id
-    // }
-    //
-    // pub fn flags(&self) -> &HeaderFlags {
-    //     &self.flags
-    // }
-    //
-    // pub fn question_count(&self) -> u16 {
-    //     self.question_count
-    // }
-
-    pub fn answer_count(&self) -> u16 {
-        self.answer_count
-    }
-
-    pub fn authority_count(&self) -> u16 {
-        self.authoritative_count
-    }
-
-    pub fn additional_count(&self) -> u16 {
-        self.additional_count
     }
 }
 
@@ -226,7 +225,7 @@ pub mod header_unittest {
         header_flags_unittest::{generate_query_header_flags, generate_response_header_flag},
         Rcode,
     };
-    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, FromBytes, ToBytes};
+    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
 
     pub fn get_response_header(id: u16) -> Header {
         let expected_header_flags =
@@ -243,7 +242,7 @@ pub mod header_unittest {
     }
 
     #[test]
-    fn read_query_header_success() {
+    fn read_query_header() {
         let packet_bytes: [u8; 12] = [
             0xf2, 0xe8, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
@@ -260,13 +259,36 @@ pub mod header_unittest {
             .build();
 
         let mut decoder = Deserialize::new(&packet_bytes);
-        let header = Header::from_bytes(&mut decoder).unwrap();
+        let header = Header::try_from_bytes(&mut decoder).unwrap();
 
         assert_eq!(header, expected_header);
     }
 
     #[test]
-    fn read_response_header_success() {
+    fn header_with_max_id() {
+        let packet_bytes: [u8; 12] = [
+            0xff, 0xff, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        let expected_header_flags = generate_query_header_flags(true);
+
+        let expected_header = HeaderBuilder::new()
+            .id(65535)
+            .flags(expected_header_flags)
+            .question_count(1)
+            .answer_count(0)
+            .authoritative_count(0)
+            .additional_count(0)
+            .build();
+
+        let mut decoder = Deserialize::new(&packet_bytes);
+        let header = Header::try_from_bytes(&mut decoder).unwrap();
+
+        assert_eq!(header, expected_header);
+    }
+
+    #[test]
+    fn read_response_header() {
         let packet_bytes: [u8; 12] = [
             0xf2, 0xe8, 0x81, 0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
         ];
@@ -284,23 +306,29 @@ pub mod header_unittest {
             .build();
 
         let mut decoder = Deserialize::new(&packet_bytes);
-        let header = Header::from_bytes(&mut decoder).unwrap();
+        let header = Header::try_from_bytes(&mut decoder).unwrap();
 
         assert_eq!(header, expected_header);
     }
 
     #[test]
-    fn read_header_insufficient_data() {
+    fn error_header_insufficient_data() {
         let packet_bytes: [u8; 2] = [0xf2, 0xe8];
 
         let mut decoder = Deserialize::new(&packet_bytes);
 
-        assert!(Header::from_bytes(&mut decoder).is_err_and(|e| {
-            match e {
-                HeaderError::InsufficientData(_) => true,
-                _ => false,
-            }
-        }));
+        assert_eq!(Header::try_from_bytes(&mut decoder), Err(HeaderError::InsufficientData(2)));
+    }
+
+    #[test]
+    fn error_multi_question() {
+        let wire_data: [u8; 12] = [
+            0xf2, 0xe8, 0x01, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        let mut decoder = Deserialize::new(&wire_data);
+
+        assert_eq!(Header::try_from_bytes(&mut decoder), Err(HeaderError::IncorrectQuestionCount(4)));
     }
 
     #[test]

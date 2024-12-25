@@ -2,7 +2,7 @@ use super::question::Question;
 use super::record::Record;
 use crate::packet::headers::header::Header;
 use thiserror::Error;
-use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, FromBytes, ToBytes};
+use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
 
 type MessageResult = Result<Message, MessageError>;
 
@@ -67,28 +67,28 @@ impl Default for MessageBuilder<HeaderUnset, QuestionUnset> {
     }
 }
 
-impl FromBytes for Message {
+impl TryFrom for Message {
     type Error = MessageError;
 
-    fn from_bytes(decoder: &mut Deserialize) -> MessageResult {
-        let header =  Header::from_bytes(decoder).map_err(|_| MessageError::InvalidHeader)?;
-        let question = Question::from_bytes(decoder).map_err(|_| MessageError::InvalidQuestion)?;
+    fn try_from_bytes(decoder: &mut Deserialize) -> MessageResult {
+        let header =  Header::try_from_bytes(decoder).map_err(|_| MessageError::InvalidHeader)?;
+        let question = Question::try_from_bytes(decoder).map_err(|_| MessageError::InvalidQuestion)?;
 
         let mut answers: Vec<Record> = Vec::with_capacity(header.answer_count() as usize);
         for _ in 0..header.answer_count() {
-            let answer = Record::from_bytes(decoder).map_err(|_| MessageError::InvalidAnswer)?;
+            let answer = Record::try_from_bytes(decoder).map_err(|_| MessageError::InvalidAnswer)?;
             answers.push(answer);
         }
 
         let mut authorities: Vec<Record> = Vec::with_capacity(header.authority_count() as usize);
         for _ in 0..header.authority_count() {
-            let answer = Record::from_bytes(decoder).map_err(|_| MessageError::InvalidAuthority)?;
+            let answer = Record::try_from_bytes(decoder).map_err(|_| MessageError::InvalidAuthority)?;
             authorities.push(answer);
         }
 
         let mut additional: Vec<Record> = Vec::with_capacity(header.additional_count() as usize);
         for _ in 0..header.additional_count() {
-            let answer = Record::from_bytes(decoder).map_err(|_| MessageError::InvalidAdditional)?;
+            let answer = Record::try_from_bytes(decoder).map_err(|_| MessageError::InvalidAdditional)?;
             additional.push(answer);
         }
 
@@ -201,11 +201,11 @@ where
 
 #[cfg(test)]
 mod message_unittest {
-    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, FromBytes, ToBytes};
+    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
     use crate::packet::message::{Message, MessageBuilder};
-    use crate::packet::record::record_unittest::get_sample_a_record;
+    use crate::packet::record::record_unittest::{get_sample_a_record};
     use crate::packet::headers::header::header_unittest::get_response_header;
-    use crate::packet::question::question_unittest::get_google_a_question;
+    use crate::packet::question::question_unittest::{get_google_a_question};
 
     #[test]
     fn google_a_ques_answer() {
@@ -230,7 +230,7 @@ mod message_unittest {
 
         let mut decoder = Deserialize::new(&wire_data);
 
-        let actual_message = Message::from_bytes(&mut decoder).unwrap();
+        let actual_message = Message::try_from_bytes(&mut decoder).unwrap();
 
         assert_eq!(actual_message, expected_message);
     }

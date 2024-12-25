@@ -1,7 +1,7 @@
 use crate::packet::fqdn::Fqdn;
 use crate::packet::seder::deserializer::Deserialize;
 use crate::packet::seder::serializer::Serialize;
-use crate::packet::seder::{FromBytes, ToBytes};
+use crate::packet::seder::{TryFrom, ToBytes};
 use crate::records::record_class::RecordClass;
 use crate::records::record_type::RecordType;
 use thiserror::Error;
@@ -63,11 +63,11 @@ impl Default for QuestionBuilder<FqdnUnset, QuestionTypeUnset> {
     }
 }
 
-impl FromBytes for Question {
+impl TryFrom for Question {
     type Error = QuestionError;
 
-    fn from_bytes(decoder: &mut Deserialize) -> QuestionResult<Question> {
-        let qname = Fqdn::from_bytes(decoder).map_err(|_| QuestionError::NameReadingError)?;
+    fn try_from_bytes(decoder: &mut Deserialize) -> QuestionResult<Question> {
+        let qname = Fqdn::try_from_bytes(decoder).map_err(|_| QuestionError::NameReadingError)?;
 
         let qtype = decoder
             .read_u16()
@@ -151,7 +151,7 @@ pub mod question_unittest {
     use crate::packet::question::RecordClass::IN;
     use crate::packet::question::RecordType::A;
     use crate::packet::question::{Question, QuestionBuilder};
-    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, FromBytes, ToBytes};
+    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
 
     pub fn get_google_a_question() -> Question {
         let expected_qname = FqdnBuilder::new()
@@ -183,7 +183,7 @@ pub mod question_unittest {
             .build();
 
         let mut decoder = Deserialize::new(&packet_bytes);
-        let actual_question = Question::from_bytes(&mut decoder).unwrap();
+        let actual_question = Question::try_from_bytes(&mut decoder).unwrap();
 
         assert_eq!(actual_question, expected_question);
     }

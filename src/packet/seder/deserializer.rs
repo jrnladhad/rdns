@@ -81,4 +81,8 @@ impl<'a> Deserialize<'a> {
             cursor,
         }
     }
+
+    pub fn cursor(&self) -> u16 {
+        self.cursor
+    }
 }

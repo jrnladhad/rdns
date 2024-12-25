@@ -2,7 +2,7 @@ use crate::packet::seder::deserializer::Deserialize;
 use crate::packet::seder::serializer::Serialize;
 use crate::records::record_data::RecordDataError;
 use std::net::Ipv4Addr;
-use crate::packet::seder::{FromBytes, ToBytes};
+use crate::packet::seder::{TryFrom, ToBytes};
 
 type ARecordResult = Result<A, RecordDataError>;
 
@@ -11,10 +11,10 @@ pub struct A {
     address: Ipv4Addr,
 }
 
-impl FromBytes for A {
+impl TryFrom for A {
     type Error = RecordDataError;
 
-    fn from_bytes(decoder: &mut Deserialize) -> ARecordResult {
+    fn try_from_bytes(decoder: &mut Deserialize) -> ARecordResult {
         let data = decoder
             .read_u32()
             .map_err(|_| RecordDataError::UnableToReadIpv4Address)?;

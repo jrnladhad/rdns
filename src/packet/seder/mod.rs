@@ -4,9 +4,9 @@ use crate::packet::seder::serializer::Serialize;
 pub mod deserializer;
 pub mod serializer;
 
-pub trait FromBytes: Sized {
+pub trait TryFrom: Sized {
     type Error;
-    fn from_bytes(decoder: &mut Deserialize) -> Result<Self, Self::Error>;
+    fn try_from_bytes(decoder: &mut Deserialize) -> Result<Self, Self::Error>;
 }
 
 pub trait ToBytes {

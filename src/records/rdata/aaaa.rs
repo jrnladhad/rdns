@@ -1,6 +1,6 @@
 use crate::packet::seder::deserializer::Deserialize;
 use crate::packet::seder::serializer::Serialize;
-use crate::packet::seder::{FromBytes, ToBytes};
+use crate::packet::seder::{TryFrom, ToBytes};
 use crate::records::record_data::RecordDataError;
 use std::net::Ipv6Addr;
 
@@ -11,10 +11,10 @@ pub struct AAAA {
     address: Ipv6Addr,
 }
 
-impl FromBytes for AAAA {
+impl TryFrom for AAAA {
     type Error = RecordDataError;
 
-    fn from_bytes(decoder: &mut Deserialize) -> AAAARecordResult {
+    fn try_from_bytes(decoder: &mut Deserialize) -> AAAARecordResult {
         let data = decoder
             .read_u128()
             .map_err(|_| RecordDataError::UnableToReadIpv6Address)?;

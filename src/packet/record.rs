@@ -3,7 +3,7 @@ use crate::packet::fqdn::Fqdn;
 use crate::records::{record_class::RecordClass, record_data::RecordData, record_type::RecordType};
 use thiserror::Error;
 use crate::packet::seder::deserializer::Deserialize;
-use crate::packet::seder::{FromBytes, ToBytes};
+use crate::packet::seder::{TryFrom, ToBytes};
 
 #[derive(Error, Debug)]
 pub enum RecordError {
@@ -83,11 +83,11 @@ impl Default for RecordBuilderUnset {
     }
 }
 
-impl FromBytes for Record {
+impl TryFrom for Record {
     type Error = RecordError;
 
-    fn from_bytes(decoder: &mut Deserialize) -> RecordResult {
-        let owner_name = Fqdn::from_bytes(decoder).map_err(|_| RecordError::InvalidName)?;
+    fn try_from_bytes(decoder: &mut Deserialize) -> RecordResult {
+        let owner_name = Fqdn::try_from_bytes(decoder).map_err(|_| RecordError::InvalidName)?;
 
         let record_type = decoder.read_u16().map_err(|_| RecordError::InvalidType)?;
         let record_type = RecordType::from(record_type);
@@ -210,7 +210,7 @@ where
 
 #[cfg(test)]
 pub mod record_unittest {
-    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, FromBytes, ToBytes};
+    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
     use crate::packet::fqdn::FqdnBuilder;
     use crate::packet::record::{Record, RecordBuilder};
     use crate::records::rdata::a::A;
@@ -268,7 +268,7 @@ pub mod record_unittest {
         let decoder = Deserialize::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(20);
 
-        let actual_record = Record::from_bytes(&mut decoder).unwrap();
+        let actual_record = Record::try_from_bytes(&mut decoder).unwrap();
 
         assert_eq!(actual_record, expected_record);
     }
@@ -287,7 +287,7 @@ pub mod record_unittest {
         let decoder = Deserialize::new(&packet_bytes);
         let mut decoder = decoder.cheap_clone(20);
 
-        let actual_record = Record::from_bytes(&mut decoder).unwrap();
+        let actual_record = Record::try_from_bytes(&mut decoder).unwrap();
 
         assert_eq!(actual_record, expected_record);
     }
@@ -309,7 +309,7 @@ pub mod record_unittest {
         let mut decoder = decoder.cheap_clone(20);
 
         for _ in 0..2 {
-            let actual_record = Record::from_bytes(&mut decoder).unwrap();
+            let actual_record = Record::try_from_bytes(&mut decoder).unwrap();
             actual_records.push(actual_record);
         }
 

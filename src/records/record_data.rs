@@ -1,6 +1,6 @@
 use crate::packet::seder::deserializer::Deserialize;
 use crate::packet::seder::serializer::Serialize;
-use crate::packet::seder::{FromBytes, ToBytes};
+use crate::packet::seder::{TryFrom, ToBytes};
 use crate::records::rdata::a::A;
 use crate::records::rdata::aaaa::AAAA;
 use crate::records::record_type::RecordType;
@@ -29,11 +29,11 @@ impl RecordData {
     ) -> Result<Self, RecordDataError> {
         match record_type {
             RecordType::A => {
-                let data = A::from_bytes(decoder)?;
+                let data = A::try_from_bytes(decoder)?;
                 Ok(RecordData::A(data))
             }
             RecordType::AAAA => {
-                let data = AAAA::from_bytes(decoder)?;
+                let data = AAAA::try_from_bytes(decoder)?;
                 Ok(RecordData::AAAA(data))
             }
             _ => Err(RecordDataError::UnableToReadIpv4Address),
