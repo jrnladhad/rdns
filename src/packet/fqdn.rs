@@ -182,7 +182,7 @@ impl FqdnBuilder<FqdnUnset> {
                     let label_len = decoder.peek().map_err(|_| FqdnError::MissingLabelLength)?;
 
                     self.fqdn_length += label_len;
-                    if self.fqdn_length >= MAX_FQDN_LENGTH {
+                    if self.fqdn_length == MAX_FQDN_LENGTH {
                         return Err(FqdnError::FqdnTooLong);
                     }
 
