@@ -250,7 +250,7 @@ impl FqdnBuilder<FqdnUnset> {
             .map_err(|_| FqdnError::NotEnoughLabelData(label_len))?;
 
         // TODO: Once we have punycode support, can get rid of this
-        if label.iter().any(|byte| byte.is_ascii() == false) {
+        if label.iter().any(|byte| !byte.is_ascii()) {
             return Err(FqdnError::NotAsciiCharacter);
         }
 
@@ -427,7 +427,7 @@ mod fqdn_unittest {
     #[test]
     fn error_label_length_without_label() {
         let wire_data: [u8; 8] = [
-            0x03, 0x77, 077, 0x77, 0x06, 0x067, 0x6f, 0x6f
+            0x03, 0x77, 0x77, 0x77, 0x06, 0x067, 0x6f, 0x6f
         ];
 
         let mut decoder = Deserialize::new(&wire_data);

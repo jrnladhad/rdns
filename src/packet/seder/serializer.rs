@@ -6,6 +6,12 @@ pub struct Serialize {
     name_compression: HashMap<String, u16>,
 }
 
+impl Default for Serialize {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Serialize {
     pub fn new() -> Self {
         Serialize {

@@ -526,7 +526,7 @@ pub mod header_flags_unittest {
 
     #[test]
     fn error_zero_flag_unset() {
-        let header_flags: u16 = 0b0_0000_0_0_0_0_001_0000;
+        let header_flags: u16 = 0b0000_0000_0001_0000;
 
         assert_eq!(
             HeaderFlags::try_from(header_flags),
@@ -536,7 +536,7 @@ pub mod header_flags_unittest {
 
     #[test]
     fn error_query_with_ra() {
-        let header_flags: u16 = 0b0_0000_0_0_0_1_000_0000;
+        let header_flags: u16 = 0b0000_0000_1000_0000;
 
         assert_eq!(
             HeaderFlags::try_from(header_flags),
@@ -546,7 +546,7 @@ pub mod header_flags_unittest {
 
     #[test]
     fn error_query_with_aa() {
-        let header_flags: u16 = 0b0_0000_1_0_0_0_000_0000;
+        let header_flags: u16 = 0b0000_0100_0000_0000;
 
         assert_eq!(
             HeaderFlags::try_from(header_flags),
@@ -556,7 +556,7 @@ pub mod header_flags_unittest {
 
     #[test]
     fn error_query_with_tc() {
-        let header_flags: u16 = 0b0_0000_0_1_0_0_000_0000;
+        let header_flags: u16 = 0b0000_0010_0000_0000;
 
         assert_eq!(
             HeaderFlags::try_from(header_flags),
@@ -570,6 +570,6 @@ pub mod header_flags_unittest {
 
         header_flag.truncation(true);
 
-        assert_eq!(header_flag.truncation, true);
+        assert!(header_flag.truncation);
     }
 }
