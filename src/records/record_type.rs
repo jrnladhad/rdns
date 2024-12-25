@@ -1,3 +1,12 @@
+use thiserror::Error;
+use crate::records::record_type::RecordTypeError::UnknownRecordType;
+
+#[derive(Error, Debug)]
+pub enum RecordTypeError {
+    #[error("Message contains unknown record type. Record type provided {0}")]
+    UnknownRecordType(u16)
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum RecordType {
     A,
@@ -13,19 +22,16 @@ pub enum RecordType {
     // TXT,
     // AXFR,
     // ALL,
-    UNKNOWN,
 }
 
-impl From<u16> for RecordType {
-    fn from(value: u16) -> Self {
+impl TryFrom<u16> for RecordType {
+    type Error = RecordTypeError;
+
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
         match value {
-            1 => RecordType::A,
-            28 => RecordType::AAAA,
-            // 2 => RecordType::NS,
-            // 5 => RecordType::CNAME,
-            // 6 => RecordType::SOA,
-            // 255 => RecordType::ALL,
-            _ => RecordType::UNKNOWN,
+            1 => Ok(RecordType::A),
+            28 => Ok(RecordType::AAAA),
+            _ => Err(UnknownRecordType(value))
         }
     }
 }
@@ -35,7 +41,6 @@ impl From<RecordType> for u16 {
         match val {
             RecordType::A => 1,
             RecordType::AAAA => 28,
-            RecordType::UNKNOWN => 256
         }
     }
 }

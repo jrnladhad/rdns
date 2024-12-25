@@ -1,6 +1,6 @@
 use crate::packet::seder::deserializer::Deserialize;
 use crate::packet::seder::serializer::Serialize;
-use crate::packet::seder::{TryFrom, ToBytes};
+use crate::packet::seder::{TryFromBytes, ToBytes};
 use crate::records::record_data::RecordDataError;
 use std::net::Ipv6Addr;
 
@@ -11,7 +11,7 @@ pub struct AAAA {
     address: Ipv6Addr,
 }
 
-impl TryFrom for AAAA {
+impl TryFromBytes for AAAA {
     type Error = RecordDataError;
 
     fn try_from_bytes(decoder: &mut Deserialize) -> AAAARecordResult {

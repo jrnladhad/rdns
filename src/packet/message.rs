@@ -2,7 +2,7 @@ use super::question::Question;
 use super::record::Record;
 use crate::packet::headers::header::Header;
 use thiserror::Error;
-use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
+use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFromBytes, ToBytes};
 
 type MessageResult = Result<Message, MessageError>;
 
@@ -67,7 +67,7 @@ impl Default for MessageBuilder<HeaderUnset, QuestionUnset> {
     }
 }
 
-impl TryFrom for Message {
+impl TryFromBytes for Message {
     type Error = MessageError;
 
     fn try_from_bytes(decoder: &mut Deserialize) -> MessageResult {
@@ -201,11 +201,12 @@ where
 
 #[cfg(test)]
 mod message_unittest {
-    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
+    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFromBytes, ToBytes};
     use crate::packet::message::{Message, MessageBuilder};
     use crate::packet::record::record_unittest::{get_sample_a_record};
     use crate::packet::headers::header::header_unittest::get_response_header;
-    use crate::packet::question::question_unittest::{get_google_a_question};
+    use crate::packet::question::question_unittest::{generate_question};
+    use crate::records::record_type::RecordType;
 
     #[test]
     fn google_a_ques_answer() {
@@ -218,7 +219,7 @@ mod message_unittest {
 
         let expected_header = get_response_header(62184);
 
-        let expected_question = get_google_a_question();
+        let expected_question = generate_question("www.google.com", RecordType::A);
 
         let answer_records = vec![get_sample_a_record()];
 
@@ -246,7 +247,7 @@ mod message_unittest {
 
         let expected_header = get_response_header(62184);
 
-        let expected_question = get_google_a_question();
+        let expected_question = generate_question("www.google.com", RecordType::A);
 
         let answer_records = vec![get_sample_a_record()];
 

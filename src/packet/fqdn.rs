@@ -1,6 +1,6 @@
 use thiserror::Error;
 use std::marker::PhantomData;
-use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
+use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFromBytes, ToBytes};
 
 const PTR_MASK: u8 = 11 << 6;
 const LEN_MASK: u8 = 0;
@@ -70,7 +70,7 @@ where
     state: PhantomData<S>,
 }
 
-impl TryFrom for Fqdn {
+impl TryFromBytes for Fqdn {
     type Error = FqdnError;
 
     fn try_from_bytes(decoder: &mut Deserialize) -> FqdnResult<Fqdn> {
@@ -273,7 +273,7 @@ impl FqdnBuilder<FqdnSet> {
 
 #[cfg(test)]
 mod fqdn_unittest {
-    use crate::packet::seder::{deserializer::Deserialize, TryFrom};
+    use crate::packet::seder::{deserializer::Deserialize, TryFromBytes};
     use crate::packet::fqdn::{Fqdn, FqdnError};
 
     #[test]

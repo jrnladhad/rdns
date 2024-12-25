@@ -1,7 +1,7 @@
 use crate::packet::fqdn::Fqdn;
 use crate::packet::seder::deserializer::Deserialize;
 use crate::packet::seder::serializer::Serialize;
-use crate::packet::seder::{TryFrom, ToBytes};
+use crate::packet::seder::{ToBytes, TryFromBytes};
 use crate::records::record_class::RecordClass;
 use crate::records::record_type::RecordType;
 use thiserror::Error;
@@ -12,8 +12,12 @@ pub enum QuestionError {
     NameReadingError,
     #[error("Could not read the question type")]
     TypeReadingError,
+    #[error("This record type is either RFC invalid or unsupported")]
+    UnknownRecord,
     #[error("Could not read the class type")]
     ClassReadingError,
+    #[error("This class is either RFC invalid or unsupported")]
+    UnknownClass,
 }
 
 type QuestionResult<T> = Result<T, QuestionError>;
@@ -63,7 +67,7 @@ impl Default for QuestionBuilder<FqdnUnset, QuestionTypeUnset> {
     }
 }
 
-impl TryFrom for Question {
+impl TryFromBytes for Question {
     type Error = QuestionError;
 
     fn try_from_bytes(decoder: &mut Deserialize) -> QuestionResult<Question> {
@@ -72,12 +76,12 @@ impl TryFrom for Question {
         let qtype = decoder
             .read_u16()
             .map_err(|_| QuestionError::TypeReadingError)?;
-        let qtype = RecordType::from(qtype);
+        let qtype = RecordType::try_from(qtype).map_err(|_| QuestionError::UnknownRecord)?;
 
         let qclass = decoder
             .read_u16()
             .map_err(|_| QuestionError::ClassReadingError)?;
-        let qclass = RecordClass::from(qclass);
+        let qclass = RecordClass::try_from(qclass).map_err(|_| QuestionError::UnknownClass)?;
 
         let question = QuestionBuilder::new()
             .question_name(qname)
@@ -149,19 +153,19 @@ where
 pub mod question_unittest {
     use crate::packet::fqdn::FqdnBuilder;
     use crate::packet::question::RecordClass::IN;
-    use crate::packet::question::RecordType::A;
     use crate::packet::question::{Question, QuestionBuilder};
-    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
+    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, ToBytes, TryFromBytes};
+    use crate::records::record_type::RecordType;
 
-    pub fn get_google_a_question() -> Question {
-        let expected_qname = FqdnBuilder::new()
-            .generate_from_string(String::from("www.google.com"))
+    pub fn generate_question(q_name: &str, q_type: RecordType) -> Question {
+        let fqdn = FqdnBuilder::new()
+            .generate_from_string(String::from(q_name))
             .build();
 
         QuestionBuilder::new()
-            .question_name(expected_qname)
+            .question_name(fqdn)
+            .question_type(q_type)
             .question_class(IN)
-            .question_type(A)
             .build()
     }
 
@@ -172,15 +176,7 @@ pub mod question_unittest {
             0x6d, 0x00, 0x00, 0x01, 0x00, 0x01,
         ];
 
-        let expected_qname = FqdnBuilder::new()
-            .generate_from_string(String::from("www.google.com"))
-            .build();
-
-        let expected_question = QuestionBuilder::new()
-            .question_name(expected_qname)
-            .question_class(IN)
-            .question_type(A)
-            .build();
+        let expected_question = generate_question("www.google.com", RecordType::A);
 
         let mut decoder = Deserialize::new(&packet_bytes);
         let actual_question = Question::try_from_bytes(&mut decoder).unwrap();
@@ -195,15 +191,7 @@ pub mod question_unittest {
             0x6d, 0x00, 0x00, 0x01, 0x00, 0x01,
         ];
 
-        let qname = FqdnBuilder::new()
-            .generate_from_string(String::from("www.google.com"))
-            .build();
-
-        let question = QuestionBuilder::new()
-            .question_name(qname)
-            .question_class(IN)
-            .question_type(A)
-            .build();
+        let question = generate_question("www.google.com", RecordType::A);
 
         let mut encoder = Serialize::new();
         question.to_bytes(&mut encoder);

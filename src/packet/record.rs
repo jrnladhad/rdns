@@ -3,7 +3,7 @@ use crate::packet::fqdn::Fqdn;
 use crate::records::{record_class::RecordClass, record_data::RecordData, record_type::RecordType};
 use thiserror::Error;
 use crate::packet::seder::deserializer::Deserialize;
-use crate::packet::seder::{TryFrom, ToBytes};
+use crate::packet::seder::{TryFromBytes, ToBytes};
 
 #[derive(Error, Debug)]
 pub enum RecordError {
@@ -11,8 +11,12 @@ pub enum RecordError {
     InvalidName,
     #[error("Invalid record name")]
     InvalidType,
+    #[error("Either this record is invalid according to the RFC or is not supported")]
+    UnknownRecord,
     #[error("Invalid record name")]
     InvalidClass,
+    #[error("Either this class is invalid according to the RFC or is not supported")]
+    UnknownClass,
     #[error("Invalid record name")]
     InvalidTtl,
     #[error("Invalid record name")]
@@ -83,17 +87,17 @@ impl Default for RecordBuilderUnset {
     }
 }
 
-impl TryFrom for Record {
+impl TryFromBytes for Record {
     type Error = RecordError;
 
     fn try_from_bytes(decoder: &mut Deserialize) -> RecordResult {
         let owner_name = Fqdn::try_from_bytes(decoder).map_err(|_| RecordError::InvalidName)?;
 
         let record_type = decoder.read_u16().map_err(|_| RecordError::InvalidType)?;
-        let record_type = RecordType::from(record_type);
+        let record_type = RecordType::try_from(record_type).map_err(|_| RecordError::UnknownRecord)?;
 
         let class = decoder.read_u16().map_err(|_| RecordError::InvalidClass)?;
-        let class = RecordClass::from(class);
+        let class = RecordClass::try_from(class).map_err(|_| RecordError::UnknownClass)?;
 
         let ttl = decoder.read_u32().map_err(|_| RecordError::InvalidTtl)?;
 
@@ -210,7 +214,7 @@ where
 
 #[cfg(test)]
 pub mod record_unittest {
-    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
+    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFromBytes, ToBytes};
     use crate::packet::fqdn::FqdnBuilder;
     use crate::packet::record::{Record, RecordBuilder};
     use crate::records::rdata::a::A;

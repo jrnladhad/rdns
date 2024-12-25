@@ -1,6 +1,6 @@
 use crate::packet::seder::deserializer::Deserialize;
 use crate::packet::seder::serializer::Serialize;
-use crate::packet::seder::{TryFrom, ToBytes};
+use crate::packet::seder::{TryFromBytes, ToBytes};
 use crate::records::rdata::a::A;
 use crate::records::rdata::aaaa::AAAA;
 use crate::records::record_type::RecordType;
@@ -19,7 +19,6 @@ pub enum RecordDataError {
 pub enum RecordData {
     A(A),
     AAAA(AAAA),
-    UNKNOWN,
 }
 
 impl RecordData {
@@ -36,7 +35,6 @@ impl RecordData {
                 let data = AAAA::try_from_bytes(decoder)?;
                 Ok(RecordData::AAAA(data))
             }
-            _ => Err(RecordDataError::UnableToReadIpv4Address),
         }
     }
 
@@ -44,7 +42,6 @@ impl RecordData {
         match self {
             RecordData::A(a_rdata) => a_rdata.to_bytes(encoder),
             RecordData::AAAA(aaaa_rdata) => aaaa_rdata.to_bytes(encoder),
-            _ => {}
         }
     }
 }

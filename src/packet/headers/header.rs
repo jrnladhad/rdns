@@ -1,5 +1,5 @@
 use crate::packet::headers::header_flags::HeaderFlags;
-use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
+use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFromBytes, ToBytes};
 use std::cmp::PartialEq;
 use thiserror::Error;
 
@@ -98,7 +98,7 @@ impl Default for HeaderBuilder<IdUnset, FlagsUnset> {
     }
 }
 
-impl TryFrom for Header {
+impl TryFromBytes for Header {
     type Error = HeaderError;
 
     fn try_from_bytes(decoder: &mut Deserialize) -> HeaderResult {
@@ -225,7 +225,7 @@ pub mod header_unittest {
         header_flags_unittest::{generate_query_header_flags, generate_response_header_flag},
         Rcode,
     };
-    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFrom, ToBytes};
+    use crate::packet::seder::{deserializer::Deserialize, serializer::Serialize, TryFromBytes, ToBytes};
 
     pub fn get_response_header(id: u16) -> Header {
         let expected_header_flags =
